@@ -28,14 +28,19 @@ interface PlanInput {
 /** A route handler: receives the request, bindings and path parameters. */
 type Handler = (req: Request, env: Env, params: string[]) => Promise<Response>;
 
+/** Largest plan payload accepted, in bytes (D1 rows cap out around 2 MB). */
+const MAX_BODY = 512 * 1024;
+
 /**
- * Builds a JSON response.
+ * Builds a JSON response. API data is per-user and changes often, so it is
+ * never cached.
  *
  * @param data - Value to serialise.
  * @param status - HTTP status, 200 by default.
  * @returns A `Response` with a JSON content type.
  */
-const json = (data: unknown, status = 200): Response => Response.json(data, { status });
+const json = (data: unknown, status = 200): Response =>
+  Response.json(data, { status, headers: { "cache-control": "no-store" } });
 
 /**
  * Builds a JSON error response of the form `{ error }`.
@@ -51,21 +56,26 @@ const error = (status: number, message: string): Response => json({ error: messa
  *
  * @param req - Incoming request with a JSON body.
  * @param partial - When true (updates), `name` may be omitted.
- * @returns The normalised fields, or a 400 `Response` if the payload is invalid.
+ * @returns The normalised fields, or a 400/413 `Response` if the payload is invalid.
  */
 async function readPlan(
   req: Request,
   partial: boolean,
 ): Promise<{ name?: string; body?: string } | Response> {
-  const input = await req.json<PlanInput>().catch(() => null);
-  if (!input || typeof input !== "object") return error(400, "expected a JSON object");
+  const text = await req.text();
+  if (text.length > MAX_BODY) return error(413, "plan too large");
+  let input: PlanInput | null = null;
+  try {
+    input = JSON.parse(text);
+  } catch { /* falls through to the 400 below */ }
+  if (!input || typeof input !== "object" || Array.isArray(input)) return error(400, "expected a JSON object");
 
   const { name, body } = input;
-  if (name !== undefined && (typeof name !== "string" || !name.trim())) {
-    return error(400, "name must be a non-empty string");
+  if (name !== undefined && (typeof name !== "string" || !name.trim() || name.length > 200)) {
+    return error(400, "name must be a string of 1-200 characters");
   }
   if (!partial && name === undefined) return error(400, "name is required");
-  if (body !== undefined && (body === null || typeof body !== "object")) {
+  if (body !== undefined && (body === null || typeof body !== "object" || Array.isArray(body))) {
     return error(400, "body must be a JSON object");
   }
 
