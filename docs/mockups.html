@@ -1,0 +1,1197 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Span Planner Mockups</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one app shell; sticky view switcher; shared stay + cost controls; one stage holds the active view; a detail sheet docks bottom (phone) or bottom-right (desktop). */
+:root {
+  --bg: #ECF1F0; --surface: #FFFFFF; --surface-2: #E1E8E6; --ink: #12222A; --ink-2: #51636A; --line: #CAD4D2;
+  --vn: #1B8769; --th: #C46E16; --tw: #3A5BBE; --accent: #B4306A; --on-bar: #FFFFFF;
+  --cool: #F3DFE7; --hot: #9C2156; --on-hot: #FFFFFF;
+  --f-display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0D1517; --surface: #142024; --surface-2: #1C2A2F; --ink: #E3EBE9; --ink-2: #95A9AD; --line: #2A3A3F;
+  --vn: #45C39C; --th: #F1A453; --tw: #88A3F5; --accent: #F0719F; --on-bar: #0D1517;
+  --cool: #2A1F27; --hot: #F0719F; --on-hot: #0D1517; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0D1517; --surface: #142024; --surface-2: #1C2A2F; --ink: #E3EBE9; --ink-2: #95A9AD; --line: #2A3A3F;
+  --vn: #45C39C; --th: #F1A453; --tw: #88A3F5; --accent: #F0719F; --on-bar: #0D1517;
+  --cool: #2A1F27; --hot: #F0719F; --on-hot: #0D1517; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--f-body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 22px 140px; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 24px; }
+.eyebrow { font: 500 11px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 4px; }
+h1 { font: 700 clamp(26px, 4vw, 34px)/1.05 var(--f-display); margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+.sub { margin: 6px 0 0; color: var(--ink-2); max-width: 62ch; }
+.sample { font: 500 11px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; border: 1px dashed var(--ink-2); color: var(--ink-2); padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
+
+/* Tabs */
+.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 8; background: var(--bg); display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-block: 12px 10px; margin-top: 10px; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 14px 7px 10px; font-weight: 500; font-size: 14px; cursor: pointer; }
+.tab .k { font: 500 11px var(--f-mono); color: var(--ink-2); }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.tab[aria-selected="true"] .k { color: inherit; opacity: .7; }
+
+.viewinfo { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 6px 28px; margin: 4px 0 14px; }
+.viewinfo p { margin: 0; }
+.viewinfo .trade { color: var(--ink-2); }
+.viewinfo .lbl { display: block; font: 500 10.5px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 2px; }
+@media (max-width: 720px) { .viewinfo { grid-template-columns: minmax(0, 1fr); } }
+
+/* Shared controls + summary */
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r) var(--r) 0 0; }
+.stayctl { display: flex; align-items: center; gap: 10px; flex: 1 1 280px; min-width: 0; }
+.stayctl label { font-weight: 600; font-size: 14px; white-space: nowrap; }
+.stayctl input { flex: 1; min-width: 80px; accent-color: var(--vn); }
+.stayctl output { font: 500 13px var(--f-mono); white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chips .lbl { font-size: 13px; color: var(--ink-2); margin-right: 2px; }
+.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 11px; font-size: 13px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; padding: 10px 14px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--r) var(--r); background: var(--surface-2); font-size: 13.5px; }
+.sum-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.sum-main .mono { font-size: 11px; letter-spacing: .08em; color: var(--ink-2); }
+.sum-main b { font: 600 16px var(--f-display); }
+.sum-main span:last-child { color: var(--ink-2); }
+.sum-opt { display: flex; align-items: center; gap: 7px; }
+.sum-opt b { font-family: var(--f-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sw { width: 10px; height: 10px; border-radius: 3px; background: var(--c, var(--ink)); flex: none; }
+.sum-tag { margin-left: auto; font: 500 11px var(--f-mono); color: var(--ink-2); }
+
+.stage { margin-top: 14px; }
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 10px; }
+.hint { font-size: 12.5px; color: var(--ink-2); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 6px 11px; font-size: 13px; font-weight: 500; color: var(--ink-2); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
+.zoom { display: flex; align-items: center; gap: 6px; flex: 1 1 160px; max-width: 280px; color: var(--ink-2); }
+.zoom input { flex: 1; accent-color: var(--ink); min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.ico { width: 13px; height: 13px; flex: none; }
+
+/* View 1: zoom timeline */
+.g-frame { --labw: 100px; display: grid; grid-template-columns: var(--labw) minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.g-labels { border-right: 1px solid var(--line); display: grid; grid-template-rows: 48px repeat(4, 44px) 56px; }
+.g-lab { display: flex; flex-direction: column; justify-content: center; padding: 0 10px; font-size: 13px; font-weight: 600; border-top: 1px solid var(--line); line-height: 1.2; min-width: 0; }
+.g-lab:first-child { border-top: 0; }
+.g-lab small { font-weight: 400; color: var(--ink-2); font-size: 11px; }
+.g-scroll { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; }
+.g-inner { position: relative; height: 280px; }
+.g-axis { position: absolute; inset: 0 auto auto 0; width: 100%; height: 48px; border-bottom: 1px solid var(--line); }
+.g-rows { position: absolute; top: 48px; left: 0; width: 100%; height: 232px; }
+.g-grid, .g-bars { position: absolute; inset: 0; }
+.tk { position: absolute; bottom: 0; height: 7px; border-left: 1px solid var(--ink-2); opacity: .5; }
+.tkl { position: absolute; bottom: 8px; font: 11px var(--f-mono); color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mj { position: absolute; top: 6px; font: 600 12px var(--f-body); white-space: nowrap; }
+.gl { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); opacity: .45; }
+.gl.m { opacity: 1; }
+.hl { position: absolute; left: 0; right: 0; height: 1px; background: var(--line); }
+.we { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.today { position: absolute; top: 0; bottom: 0; border-left: 1.5px solid var(--ink-2); }
+.todaytag { position: absolute; top: 24px; transform: translateX(-50%); font: 600 10px var(--f-mono); text-transform: uppercase; letter-spacing: .06em; background: var(--ink-2); color: var(--surface); padding: 1px 5px; border-radius: 4px; }
+.dl { position: absolute; top: 0; bottom: 0; border-left: 1.5px dashed var(--accent); }
+.dlab { position: absolute; font: 600 11px var(--f-mono); color: var(--accent); white-space: nowrap; }
+.bar { position: absolute; height: 32px; border: 0; border-radius: 7px; padding: 0 10px; display: flex; align-items: center; font-size: 12.5px; font-weight: 500; color: var(--on-bar); white-space: nowrap; overflow: hidden; cursor: pointer; text-align: left; }
+.bar span { overflow: hidden; text-overflow: ellipsis; }
+.bar.tight span { display: none; }
+.bar.vn { background: var(--vn); } .bar.th { background: var(--th); } .bar.tw { background: var(--tw); }
+.bar.visa, .vbar.visa { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 11%, transparent) 0 5px, transparent 5px 10px); border: 1.5px dashed var(--ink); color: var(--ink); }
+.bar.fl { height: 10px; padding: 0; background: var(--ink); border-radius: 5px; }
+.bar.fl.wide { height: 22px; padding: 0 8px; font: 500 11px var(--f-mono); color: var(--surface); }
+.bar.sel, .vbar.sel { outline: 2px solid var(--accent); outline-offset: 2px; }
+.track { position: absolute; height: 32px; border-radius: 7px; background: color-mix(in srgb, var(--vn) 12%, transparent); border: 1px dashed color-mix(in srgb, var(--vn) 65%, transparent); }
+.handle { position: absolute; width: 16px; height: 32px; border-radius: 0 7px 7px 0; cursor: ew-resize; touch-action: none; display: grid; place-items: center; background: color-mix(in srgb, var(--on-bar) 28%, transparent); }
+.handle::before { content: ""; width: 4px; height: 14px; border-left: 1.5px solid var(--on-bar); border-right: 1.5px solid var(--on-bar); }
+.ftag { position: absolute; transform: translateX(-100%); height: 20px; display: flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font: 500 11px var(--f-mono); white-space: nowrap; cursor: pointer; }
+.fc { position: absolute; height: 20px; border: 0; border-right: 1px solid var(--surface); padding: 0; display: grid; place-items: center; overflow: hidden; font: 500 10.5px var(--f-mono); color: var(--ink); cursor: pointer; background: color-mix(in oklab, var(--hot) var(--p), var(--cool)); font-variant-numeric: tabular-nums; }
+.fc.hotx, .c-cell.hotx, .vchip.hotx, .nb-c.hotx { color: var(--on-hot); }
+.fc.on { outline: 2px solid var(--ink); outline-offset: -2px; z-index: 2; }
+.fc.off { opacity: .22; }
+.fcode { position: absolute; transform: translateX(-100%); height: 20px; display: flex; align-items: center; font: 600 10.5px var(--f-mono); color: var(--ink-2); }
+@media (max-width: 560px) { .g-frame { --labw: 74px; } .g-lab { font-size: 12px; padding: 0 8px; } }
+
+/* View 2: day scroll */
+.v-scroll { height: min(68vh, 620px); overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.v-head { position: sticky; top: 0; z-index: 4; height: 30px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.v-head span { position: absolute; top: 8px; font: 600 10.5px var(--f-mono); letter-spacing: .06em; color: var(--ink-2); text-align: center; }
+.v-inner { position: relative; }
+.v-inner.lined { background-image: repeating-linear-gradient(to bottom, transparent 0 calc(var(--rh) - 1px), color-mix(in srgb, var(--line) 55%, transparent) calc(var(--rh) - 1px) var(--rh)); }
+.vday { position: absolute; left: 8px; font: 11px var(--f-mono); color: var(--ink-2); white-space: nowrap; transform: translateY(-50%); }
+.vday b { color: var(--ink); font-weight: 600; }
+.vmon { position: absolute; left: 0; right: 0; border-top: 1px solid var(--ink-2); opacity: .5; }
+.vwe { position: absolute; left: 0; right: 0; background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.vbar { position: absolute; border: 0; border-radius: 7px; padding: 10px 0; display: flex; justify-content: center; overflow: hidden; cursor: pointer; color: var(--on-bar); font-size: 12px; font-weight: 500; }
+.vbar span { writing-mode: vertical-rl; white-space: nowrap; }
+.vbar.visa { font-size: 10px; padding: 6px 0; }
+.vbar.vn { background: var(--vn); } .vbar.th { background: var(--th); } .vbar.tw { background: var(--tw); }
+.vtrack { position: absolute; border-radius: 7px; background: color-mix(in srgb, var(--vn) 12%, transparent); border: 1px dashed color-mix(in srgb, var(--vn) 65%, transparent); }
+.vhandle { position: absolute; height: 18px; border-radius: 0 0 7px 7px; background: var(--vn); cursor: ns-resize; touch-action: none; display: grid; place-items: center; z-index: 2; }
+.vhandle::before { content: ""; width: 16px; height: 5px; border-top: 1.5px solid var(--on-bar); border-bottom: 1.5px solid var(--on-bar); }
+.vtag { position: absolute; transform: translate(-50%, -50%); z-index: 2; display: flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font: 500 10.5px var(--f-mono); white-space: nowrap; cursor: pointer; }
+.vfare { position: absolute; display: flex; gap: 2px; }
+.vfare.col { flex-direction: column; justify-content: center; }
+.vchip { border: 0; border-radius: 5px; padding: 0 5px; text-align: left; font: 500 10.5px var(--f-mono); color: var(--ink); background: color-mix(in oklab, var(--hot) var(--p), var(--cool)); cursor: pointer; flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
+.vchip.on { outline: 2px solid var(--ink); outline-offset: -1px; }
+.vline { position: absolute; left: 0; right: 0; border-top: 1.5px solid var(--ink-2); }
+.vline.dl { border-top-style: dashed; border-top-color: var(--accent); border-left: 0; }
+.vline span { position: absolute; right: 8px; top: -9px; font: 600 10px var(--f-mono); padding: 0 4px; background: var(--surface); color: var(--ink-2); }
+.vline.dl span { color: var(--accent); }
+
+/* View 3: fare calendar */
+.c-top { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; margin-bottom: 12px; font-size: 12.5px; color: var(--ink-2); }
+.c-scale { display: flex; align-items: center; gap: 8px; }
+.c-scale i { display: block; width: 120px; height: 10px; border-radius: 3px; background: linear-gradient(90deg, color-mix(in oklab, var(--hot) 8%, var(--cool)), var(--hot)); }
+.c-key { display: flex; align-items: center; gap: 6px; }
+.c-key i { width: 18px; height: 3px; border-radius: 2px; display: block; }
+.c-months { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.c-months.year { grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); }
+.c-month { padding: 12px; }
+.c-month h4 { margin: 0 0 8px; font: 600 15px var(--f-display); }
+.c-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.c-wd { font: 10px var(--f-mono); color: var(--ink-2); text-align: center; padding-bottom: 2px; }
+.c-cell { position: relative; aspect-ratio: 1 / 1.08; border: 0; border-radius: 6px; padding: 4px 4px 0; background: var(--surface-2); display: flex; flex-direction: column; align-items: flex-start; min-width: 0; cursor: default; color: var(--ink); }
+.c-cell.heat { background: color-mix(in oklab, var(--hot) var(--p), var(--cool)); }
+.c-cell[data-dep] { cursor: pointer; }
+.c-cell .n { font: 500 11px var(--f-mono); }
+.c-cell .v { font: 600 11px var(--f-mono); margin-top: auto; margin-bottom: 13px; font-variant-numeric: tabular-nums; }
+.c-cell.dep { outline: 2px solid var(--ink); outline-offset: 1px; z-index: 1; }
+.c-cell .ico { position: absolute; top: 4px; right: 4px; }
+.c-cell.today .n { text-decoration: underline; text-underline-offset: 2px; }
+.bands { position: absolute; left: 3px; right: 3px; bottom: 3px; display: grid; gap: 1.5px; }
+.bands i { display: block; height: 3px; border-radius: 2px; }
+.b-visa { background: repeating-linear-gradient(90deg, var(--ink) 0 3px, transparent 3px 5px); }
+.b-vn { background: var(--vn); } .b-th { background: var(--th); } .b-tw { background: var(--tw); }
+.b-off { background: transparent; }
+.year .c-month { padding: 10px; }
+.year .c-cell { aspect-ratio: 1; padding: 1px 2px; border-radius: 3px; }
+.year .c-cell .n { font-size: 8.5px; }
+.year .c-cell .v, .year .c-cell .ico { display: none; }
+.year .bands { left: 1px; right: 1px; bottom: 1px; gap: 1px; }
+.year .bands i { height: 2px; }
+.c-best { margin-top: 14px; padding: 12px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.c-best h3 { margin: 0; font: 600 15px var(--f-display); flex-basis: 100%; }
+.c-best p { margin: 0; flex-basis: 100%; font-size: 12.5px; color: var(--ink-2); }
+.pickbtn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 6px 10px; font: 500 12.5px var(--f-mono); cursor: pointer; }
+.pickbtn.on { border-color: var(--ink); }
+
+/* View 4: compare plans */
+.s-list { display: grid; gap: 10px; }
+.s-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 18px; padding: 14px; align-items: center; }
+.s-row.best { border-color: var(--ink); }
+.s-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.s-name h3 { margin: 0; font: 600 16px var(--f-display); }
+.pill { font: 600 10px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: var(--ink); color: var(--bg); }
+.s-tl { grid-column: 1; position: relative; height: 16px; border-radius: 4px; background: var(--surface-2); }
+.s-seg { position: absolute; top: 0; bottom: 0; border: 0; padding: 0; cursor: pointer; }
+.s-seg.vn { background: var(--vn); border-radius: 4px 0 0 4px; } .s-seg.th { background: var(--th); } .s-seg.tw { background: var(--tw); }
+.s-seg + .s-seg { border-left: 2px solid var(--surface); }
+.s-visa { position: absolute; top: -4px; bottom: -4px; border-left: 1.5px dashed var(--accent); }
+.s-break { grid-column: 1; font: 12px var(--f-mono); color: var(--ink-2); }
+.s-total { grid-column: 2; grid-row: 1 / span 3; text-align: right; }
+.s-total b { display: block; font: 600 26px var(--f-display); font-variant-numeric: tabular-nums; }
+.s-total small { font-size: 11.5px; color: var(--ink-2); }
+.s-apply { grid-column: 1 / -1; justify-self: start; border: 1px dashed var(--ink-2); background: none; border-radius: 8px; padding: 5px 10px; font-size: 12.5px; cursor: pointer; }
+.s-chart { margin-top: 14px; padding: 14px 14px 6px; }
+.s-chart h3 { margin: 0; font: 600 15px var(--f-display); }
+.s-chart p { margin: 2px 0 6px; font-size: 12.5px; color: var(--ink-2); }
+#s-chart svg { display: block; touch-action: none; cursor: crosshair; }
+@media (max-width: 520px) { .s-row { grid-template-columns: minmax(0, 1fr); } .s-total { grid-column: 1; grid-row: auto; text-align: left; } }
+
+/* View 5: route map */
+.m-split { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 780px) { .m-split { grid-template-columns: minmax(0, 1fr); } }
+.m-map { padding: 6px; }
+.m-map svg { display: block; width: 100%; height: auto; }
+.m-side { display: grid; gap: 12px; min-width: 0; }
+.m-side .tools { margin: 0; }
+.m-itin { list-style: none; margin: 0; padding: 6px 0; }
+.m-itin li button { width: 100%; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 10px; align-items: start; text-align: left; border: 0; background: none; padding: 8px 14px; cursor: pointer; }
+.m-itin li button:hover { background: var(--surface-2); }
+.m-itin .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; background: var(--c); }
+.m-itin .dot.fl { border-radius: 2px; background: none; color: var(--ink); margin-top: 3px; }
+.m-itin b { display: block; font-weight: 600; }
+.m-itin small { color: var(--ink-2); font-size: 12px; }
+.m-itin .amt { font: 600 13px var(--f-mono); font-variant-numeric: tabular-nums; }
+.m-itin .tot { border-top: 1px solid var(--line); margin-top: 4px; display: flex; justify-content: space-between; padding: 10px 14px 6px; font-weight: 600; }
+.m-itin .tot span:last-child { font-family: var(--f-mono); }
+.m-scrub { padding: 12px 14px 8px; }
+.m-scrub-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; font-size: 13px; }
+.m-scrub-head span { color: var(--ink-2); }
+#m-spark svg { display: block; touch-action: none; cursor: ew-resize; }
+.svg-t { fill: var(--ink); font-family: var(--f-body); }
+.svg-m { fill: var(--ink-2); font-family: var(--f-mono); }
+.svg-g { stroke: var(--line); fill: none; }
+.route { fill: none; stroke-linecap: round; cursor: pointer; }
+.route.on { stroke-width: 3.5; stroke-dasharray: 9 7; animation: flow 1.4s linear infinite; }
+.route.off { stroke-width: 2; opacity: .35; }
+@keyframes flow { to { stroke-dashoffset: -32; } }
+@media (prefers-reduced-motion: reduce) { .route.on { animation: none; } }
+
+/* Detail sheet */
+.sheet { position: fixed; z-index: 20; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(380px, calc(100vw - 32px)); max-height: 72vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--c, var(--ink)); border-radius: 14px; box-shadow: 0 20px 50px -14px color-mix(in srgb, var(--ink) 40%, transparent); padding: 14px 16px 16px; }
+@media (max-width: 640px) { .sheet { left: 0; right: 0; bottom: 0; width: auto; border-radius: 16px 16px 0 0; padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); } }
+.sh-head { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
+.sh-head .k { font: 500 10.5px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.sh-head h3 { margin: 2px 0 0; font: 600 20px var(--f-display); }
+.sh-x { border: 1px solid var(--line); background: none; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 18px; line-height: 1; }
+.sheet dl { margin: 12px 0 0; display: grid; gap: 6px; }
+.sheet dl div { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; border-bottom: 1px dotted var(--line); padding-bottom: 5px; }
+.sheet dt { color: var(--ink-2); }
+.sheet dd { margin: 0; font-family: var(--f-mono); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+.sheet dl div.total { border-bottom: 0; font-weight: 600; }
+.sheet dl div.total dd { font-weight: 600; font-size: 14px; }
+.sh-note { margin: 10px 0 0; font-size: 12.5px; color: var(--ink-2); }
+.nb-h { margin: 14px 0 6px; font: 500 10.5px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.nb { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.nb-c { border: 0; border-radius: 6px; padding: 5px 2px; display: grid; gap: 1px; justify-items: center; cursor: pointer; color: var(--ink); background: color-mix(in oklab, var(--hot) var(--p), var(--cool)); }
+.nb-c small { font: 10px var(--f-mono); opacity: .8; }
+.nb-c b { font: 600 11.5px var(--f-mono); }
+.nb-c.on { outline: 2px solid var(--ink); outline-offset: 1px; }
+.steps { display: flex; gap: 8px; margin-top: 12px; }
+.steps button { flex: 1; border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 7px; font-size: 13px; cursor: pointer; }
+.steps button:disabled { opacity: .4; cursor: default; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Planner mockups · 5 directions</p>
+      <h1>Span</h1>
+      <p class="sub">Your 90-day Vietnam visa from Oct 20, an adjustable stay, and two 10-night options after it. Every view shares the same plan, so a change in one shows in the others.</p>
+    </div>
+    <span class="sample">Sample prices · USD</span>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Mockup views"></nav>
+  <section class="viewinfo" id="viewinfo" aria-live="polite"></section>
+
+  <section class="controls" aria-label="Plan controls">
+    <div class="stayctl">
+      <label for="stay">Vietnam stay</label>
+      <input id="stay" type="range" min="60" max="90" step="1">
+      <output id="stay-out" for="stay"></output>
+    </div>
+    <div class="chips" id="filter" role="group" aria-label="Which costs to show">
+      <span class="lbl">Costs</span>
+      <button class="chip" data-f="all">All</button>
+      <button class="chip" data-f="stays">Stays</button>
+      <button class="chip" data-f="travel">Travel</button>
+      <button class="chip" data-f="none">Hide</button>
+    </div>
+  </section>
+  <section class="summary" id="summary" aria-live="polite"></section>
+
+  <main class="stage" id="stage"></main>
+</div>
+
+<aside class="sheet" id="sheet" role="dialog" aria-labelledby="sh-t" hidden>
+  <div class="sh-head">
+    <div><div class="k" id="sh-k"></div><h3 id="sh-t"></h3></div>
+    <button class="sh-x" id="sh-x" aria-label="Close details">×</button>
+  </div>
+  <div id="sh-b"></div>
+</aside>
+
+<script>
+'use strict';
+
+/* ---------- Dates ---------- */
+
+/** Milliseconds in one day. */
+const DAY = 864e5;
+/** Arrival in Vietnam (UTC midnight); day index 0 everywhere below. */
+const ARRIVE = Date.UTC(2026, 9, 20);
+const WD = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/**
+ * Day index (days since arrival) of a calendar date. Month overflow is allowed.
+ * @param {number} y Full year.
+ * @param {number} m Zero-based month.
+ * @param {number} d Day of month.
+ * @returns {number}
+ */
+function idxOf(y, m, d) { return Math.round((Date.UTC(y, m, d) - ARRIVE) / DAY); }
+
+/**
+ * UTC date for a day index.
+ * @param {number} i Day index.
+ * @returns {Date}
+ */
+function dateOf(i) { return new Date(ARRIVE + Math.floor(i) * DAY); }
+
+/**
+ * Short date label such as "Dec 28" or, with options, "Mon, Dec 28".
+ * @param {number} i Day index.
+ * @param {Intl.DateTimeFormatOptions} [o] Extra format options.
+ * @returns {string}
+ */
+function fmt(i, o = {}) { return dateOf(i).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC', ...o }); }
+
+/**
+ * Clock time for fractional hours, wrapping past midnight.
+ * @param {number} h Hours, e.g. 10.42.
+ * @returns {string} "10:25"
+ */
+function hhmm(h) { const m = Math.round(h * 60); const p = n => String(n).padStart(2, '0'); return `${p(Math.floor(m / 60) % 24)}:${p(m % 60)}`; }
+
+/**
+ * Duration label for fractional hours.
+ * @param {number} h Hours.
+ * @returns {string} "1h 35m"
+ */
+function dur(h) { const m = Math.round(h * 60); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; }
+
+/**
+ * Month starts that touch the range [a, b], stepping by `step` months.
+ * @param {number} a First day index.
+ * @param {number} b Last day index.
+ * @param {number} [step=1] Months per step; starts are aligned to multiples of it.
+ * @returns {{i:number,y:number,m:number}[]}
+ */
+function monthStarts(a, b, step = 1) {
+  const d = dateOf(a), out = [];
+  let y = d.getUTCFullYear(), m = d.getUTCMonth() - (d.getUTCMonth() % step);
+  for (;;) {
+    const dt = new Date(Date.UTC(y, m, 1)), i = Math.round((dt - ARRIVE) / DAY);
+    if (i > b) break;
+    out.push({ i, y: dt.getUTCFullYear(), m: dt.getUTCMonth() });
+    m += step;
+  }
+  return out;
+}
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const usd = n => '$' + Math.round(n).toLocaleString('en-US');
+const $ = (s, r = document) => r.querySelector(s);
+
+/* ---------- Plan data (sample) ---------- */
+
+const VISA_DAYS = 90;
+const DEP_MIN = 59, DEP_MAX = 89;            // leave on day 60..90 of the visa
+const OPT_NIGHTS = 10;
+const TODAY = idxOf(2026, 10, 25);
+const NOW_H = 15.6;                           // Saigon local hour, for the "today" line
+const D0 = idxOf(2026, 9, 1), D1 = idxOf(2028, 0, 1);
+const HOLIDAY = [idxOf(2026, 11, 24), idxOf(2027, 0, 1)];
+const PLANE = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>';
+
+/** Places with sample nightly room rate and daily spend. */
+const PLACES = {
+  vn: { city: 'Vietnam', code: 'SGN', night: 32, daily: 22, ll: [10.82, 106.66], c: 'var(--vn)' },
+  th: { city: 'Bangkok', code: 'BKK', night: 46, daily: 30, ll: [13.69, 100.75], c: 'var(--th)' },
+  tw: { city: 'Taipei', code: 'TPE', night: 74, daily: 38, ll: [25.08, 121.23], c: 'var(--tw)' },
+};
+
+/** Flight routes: base fare, departure hour (local), duration, time-zone shift at arrival. */
+const ROUTES = {
+  th: { code: 'SGN → BKK', base: 88, dep: 10.42, dur: 1.58, tz: 0 },
+  tw: { code: 'SGN → TPE', base: 168, dep: 8.83, dur: 3.42, tz: 1 },
+  thtw: { code: 'BKK → TPE', base: 132, dep: 13.5, dur: 3.75, tz: 1 },
+};
+
+/** Compared plans; each leg is [place, nights]. */
+const PLANS = [
+  { id: 'A', name: 'Vietnam → Bangkok', short: 'Bangkok', legs: [['th', 10]], c: 'var(--th)' },
+  { id: 'B', name: 'Vietnam → Taipei', short: 'Taipei', legs: [['tw', 10]], c: 'var(--tw)' },
+  { id: 'C', name: 'Vietnam → Bangkok → Taipei', short: 'Both', legs: [['th', 5], ['tw', 5]], c: 'var(--accent)' },
+];
+
+/**
+ * Deterministic pseudo-random number in [0, 1).
+ * @param {number} x Seed.
+ * @returns {number}
+ */
+function noise(x) { const s = Math.sin(x * 12.9898) * 43758.5453; return s - Math.floor(s); }
+
+/**
+ * Sample one-way fare for a route on a day: weekday swing, Christmas and New Year peaks, a little noise.
+ * @param {keyof ROUTES} r Route key.
+ * @param {number} i Departure day index.
+ * @returns {number} Fare in USD.
+ */
+function fare(r, i) {
+  const R = ROUTES[r];
+  const week = [0.14, 0, -0.08, -0.07, 0, 0.12, 0.04][dateOf(i).getUTCDay()];
+  const nye = 0.55 * Math.exp(-((i - idxOf(2026, 11, 30)) ** 2) / 32);
+  const xmas = 0.22 * Math.exp(-((i - idxOf(2026, 11, 22)) ** 2) / 8);
+  const n = (noise(i * 3.1 + R.base) - 0.5) * 0.16;
+  return Math.round(R.base * (1 + week + nye + xmas + n));
+}
+
+const fareRangeCache = {};
+/**
+ * Lowest and highest fare for a route across the departure window.
+ * @param {keyof ROUTES} r Route key.
+ * @returns {[number, number]}
+ */
+function fareRange(r) {
+  if (!fareRangeCache[r]) {
+    const v = []; for (let i = DEP_MIN; i <= DEP_MAX; i++) v.push(fare(r, i));
+    fareRangeCache[r] = [Math.min(...v), Math.max(...v)];
+  }
+  return fareRangeCache[r];
+}
+
+/**
+ * Nightly room rate; Bangkok and Taipei cost 35% more over Christmas and New Year.
+ * @param {keyof PLACES} p Place key.
+ * @param {number} i Night (day index).
+ * @returns {number}
+ */
+function nightRate(p, i) { const b = PLACES[p].night; return p !== 'vn' && i >= HOLIDAY[0] && i <= HOLIDAY[1] ? b * 1.35 : b; }
+
+/**
+ * Cost of a stay.
+ * @param {keyof PLACES} p Place key.
+ * @param {number} start First night (day index).
+ * @param {number} nights Number of nights.
+ * @returns {{lodging:number,daily:number,total:number,holiday:number}}
+ */
+function stayCost(p, start, nights) {
+  let lodging = 0, holiday = 0;
+  for (let i = start; i < start + nights; i++) { lodging += nightRate(p, i); if (nightRate(p, i) > PLACES[p].night) holiday++; }
+  const daily = PLACES[p].daily * nights;
+  return { lodging, daily, total: lodging + daily, holiday };
+}
+
+/* ---------- State ---------- */
+
+/** Shared state for all views. */
+const S = { view: 'timeline', stayDays: 70, filter: 'all', sel: null };
+
+const depIdx = () => S.stayDays - 1;
+const showStay = () => S.filter === 'all' || S.filter === 'stays';
+const showTravel = () => S.filter === 'all' || S.filter === 'travel';
+
+/**
+ * Sum of the cost parts the current filter shows.
+ * @param {number} stay Stay cost.
+ * @param {number} fares Flight cost.
+ * @returns {number}
+ */
+function costOf(stay, fares) { return S.filter === 'none' ? stay + fares : (showStay() ? stay : 0) + (showTravel() ? fares : 0); }
+
+/** Cost of the Vietnam stay so far plus planned days. */
+function vnCost() { const n = S.stayDays - 1; const lodging = n * PLACES.vn.night, daily = S.stayDays * PLACES.vn.daily; return { lodging, daily, total: lodging + daily, nights: n }; }
+
+/**
+ * Cost of a compared plan when leaving Vietnam on day d.
+ * @param {typeof PLANS[number]} p Plan.
+ * @param {number} d Departure day index.
+ * @returns {{stay:number,fares:number,total:number,end:number,segs:object[]}}
+ */
+function planCost(p, d) {
+  let t = d, stay = 0, fares = 0, from = 'vn';
+  const segs = [];
+  for (const [k, n] of p.legs) {
+    const r = from === 'vn' ? k : 'thtw', f = fare(r, t), s = stayCost(k, t, n);
+    fares += f; stay += s.total;
+    segs.push({ k, start: t, nights: n, stay: s.total, fare: f, route: r });
+    t += n; from = k;
+  }
+  return { stay, fares, total: costOf(stay, fares), end: t, segs };
+}
+
+/**
+ * Heat styling for a value between lo and hi.
+ * @param {number} v Value.
+ * @param {number} lo Low end.
+ * @param {number} hi High end.
+ * @returns {{style:string, cls:string}} Inline --p style and a class that flips the text color on dark cells.
+ */
+function heat(v, lo, hi) { const p = hi > lo ? Math.round(6 + 86 * (v - lo) / (hi - lo)) : 30; return { style: `--p:${p}%`, cls: p > 58 ? ' hotx' : '' }; }
+
+/**
+ * Leave Vietnam on day i (clamped to the 60–90 day window).
+ * @param {number} i Departure day index.
+ */
+function setDep(i) { const s = clamp(i + 1, DEP_MIN + 1, DEP_MAX + 1); if (s !== S.stayDays) set({ stayDays: s }); }
+
+/**
+ * Merge a patch into the state and redraw.
+ * @param {Partial<typeof S>} patch
+ */
+function set(patch) { Object.assign(S, patch); renderAll(); }
+
+let justDragged = false;
+
+/**
+ * Start dragging the end of the Vietnam stay.
+ * @param {PointerEvent} e The pointerdown event.
+ * @param {(x:number, y:number) => number} toDay Converts client coordinates to a fractional day index.
+ */
+function dragDep(e, toDay) {
+  e.preventDefault();
+  const move = ev => setDep(Math.round(toDay(ev.clientX, ev.clientY)));
+  const up = () => {
+    removeEventListener('pointermove', move); removeEventListener('pointerup', up);
+    justDragged = true; setTimeout(() => { justDragged = false; }, 60);
+  };
+  addEventListener('pointermove', move); addEventListener('pointerup', up);
+}
+
+/**
+ * Wire a segmented control.
+ * @param {Element} seg Container of buttons.
+ * @param {string} attr Data attribute name holding each button's value.
+ * @param {() => string} get Current value.
+ * @param {(v:string) => void} onPick Called with the picked value.
+ */
+function segment(seg, attr, get, onPick) {
+  seg.addEventListener('click', e => { const b = e.target.closest('button'); if (b) onPick(b.dataset[attr]); });
+  return () => seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === String(get()))));
+}
+
+/* ---------- View 1: zoom timeline ---------- */
+
+const UNITS = [['h', 1], ['h', 3], ['h', 6], ['h', 12], ['d', 1], ['d', 2], ['w', 1], ['m', 1], ['m', 3], ['y', 1]];
+const SPAN = { h: 1 / 24, d: 1, w: 7, m: 30.44, y: 365.25 };
+
+/**
+ * Pick a tick unit for the zoom level and list ticks inside [a, b].
+ * @param {number} a First visible day.
+ * @param {number} b Last visible day.
+ * @param {number} ppd Pixels per day.
+ * @returns {{k:string, n:number, minor:[number,string][], major:[number,string][]}}
+ */
+function axisTicks(a, b, ppd) {
+  const [k, n] = UNITS.find(([k, n]) => SPAN[k] * n * ppd >= 58) || UNITS[UNITS.length - 1];
+  const minor = [], major = [];
+  const months = () => monthStarts(a, b).forEach(s => major.push([s.i, `${MONL[s.m]} ${s.y}`]));
+  if (k === 'h') {
+    for (let H = Math.floor(a * 24 / n) * n; H / 24 <= b; H += n) minor.push([H / 24, `${String(((H % 24) + 24) % 24).padStart(2, '0')}:00`]);
+    for (let i = Math.floor(a); i <= b; i++) major.push([i, fmt(i, { weekday: 'short' })]);
+  } else if (k === 'd' || k === 'w') {
+    let i = Math.floor(a);
+    if (k === 'w') while (dateOf(i).getUTCDay() !== 1) i++;
+    else if (n === 2 && (i - D0) % 2) i++;
+    const wide = ppd * n >= 76;
+    for (; i <= b; i += k === 'w' ? 7 : n) {
+      const dt = dateOf(i);
+      minor.push([i, k === 'w' ? fmt(i) : (wide ? WD[dt.getUTCDay()] + ' ' : '') + dt.getUTCDate()]);
+    }
+    months();
+  } else if (k === 'm') {
+    monthStarts(a, b, n).forEach(s => minor.push([s.i, MON[s.m]]));
+    monthStarts(a, b, 12).forEach(s => major.push([s.i, String(s.y)]));
+  } else {
+    monthStarts(a, b, 12).forEach(s => minor.push([s.i, String(s.y)]));
+  }
+  return { k, n, minor, major };
+}
+
+const G = {
+  ppd: 0,
+  /** @param {HTMLElement} el */
+  mount(el) {
+    el.innerHTML = `
+<div class="tools">
+  <div class="seg" id="g-pre" role="group" aria-label="Zoom presets">${['Hours', 'Days', 'Weeks', 'Months', 'Year'].map(p => `<button data-p="${p}">${p}</button>`).join('')}</div>
+  <label class="zoom"><span class="mono" aria-hidden="true">−</span><input id="g-zoom" type="range" min="0" max="1000" aria-label="Zoom level"><span class="mono" aria-hidden="true">+</span></label>
+  <span class="hint">Pinch or Ctrl+scroll to zoom. Drag the end of the green bar. Tap a fare to leave that day.</span>
+</div>
+<div class="g-frame">
+  <div class="g-labels">
+    <div class="g-lab"><small id="g-scale"></small></div>
+    <div class="g-lab">Visa<small>fixed</small></div>
+    <div class="g-lab">Vietnam<small>60–90 days</small></div>
+    <div class="g-lab">Bangkok<small>option</small></div>
+    <div class="g-lab">Taipei<small>option</small></div>
+    <div class="g-lab">Fares<small>by day</small></div>
+  </div>
+  <div class="g-scroll" id="g-scroll"><div class="g-inner" id="g-inner">
+    <div class="g-axis" id="g-axis"></div>
+    <div class="g-rows"><div class="g-grid" id="g-grid"></div><div class="g-bars" id="g-bars"></div></div>
+  </div></div>
+</div>`;
+    this.sc = $('#g-scroll', el); this.inner = $('#g-inner', el); this.axis = $('#g-axis', el);
+    this.grid = $('#g-grid', el); this.bars = $('#g-bars', el); this.zoom = $('#g-zoom', el); this.pre = $('#g-pre', el);
+    this.ppd = 0;
+    let raf = 0;
+    this.sc.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => this.drawAxis()); }, { passive: true });
+    this.zoom.addEventListener('input', () => this.zoomTo(this.fromSlider(+this.zoom.value)));
+    this.pre.addEventListener('click', e => { const b = e.target.closest('button'); if (b) this.preset(b.dataset.p); });
+    this.sc.addEventListener('wheel', e => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      this.zoomTo(this.ppd * Math.exp(-e.deltaY * 0.01), e.clientX - this.sc.getBoundingClientRect().left);
+    }, { passive: false });
+    let pinch = null;
+    const span = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    this.sc.addEventListener('touchstart', e => {
+      if (e.touches.length === 2) pinch = { d: span(e.touches), p: this.ppd, cx: (e.touches[0].clientX + e.touches[1].clientX) / 2 - this.sc.getBoundingClientRect().left };
+    }, { passive: true });
+    this.sc.addEventListener('touchmove', e => { if (pinch && e.touches.length === 2) { e.preventDefault(); this.zoomTo(pinch.p * span(e.touches) / pinch.d, pinch.cx); } }, { passive: false });
+    this.sc.addEventListener('touchend', e => { if (e.touches.length < 2) pinch = null; });
+    el.addEventListener('pointerdown', e => {
+      if (e.target.id !== 'g-handle') return;
+      dragDep(e, cx => (cx - this.sc.getBoundingClientRect().left + this.sc.scrollLeft) / this.ppd + D0 - 0.33);
+    });
+    el.addEventListener('keydown', e => {
+      if (e.target.id !== 'g-handle') return;
+      const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+      if (step) { e.preventDefault(); setDep(depIdx() + step); }
+    });
+  },
+  w() { return this.sc.clientWidth || 600; },
+  ppdMin() { return this.w() / (D1 - D0); },
+  ppdMax: 24 * 96,
+  toSlider(p) { return Math.round(1000 * Math.log(p / this.ppdMin()) / Math.log(this.ppdMax / this.ppdMin())); },
+  fromSlider(v) { return this.ppdMin() * Math.pow(this.ppdMax / this.ppdMin(), v / 1000); },
+  x(i) { return (i - D0) * this.ppd; },
+  /**
+   * Zoom to a scale while keeping the day under `anchor` fixed on screen.
+   * @param {number} p New pixels per day.
+   * @param {number} [anchor] Pixel offset inside the scroller.
+   */
+  zoomTo(p, anchor = this.w() / 2) {
+    const day = (this.sc.scrollLeft + anchor) / this.ppd + D0;
+    this.ppd = clamp(p, this.ppdMin(), this.ppdMax);
+    this.render();
+    this.sc.scrollLeft = (day - D0) * this.ppd - anchor;
+    this.drawAxis();
+  },
+  /** @param {string} name Preset name. */
+  preset(name) {
+    const d = depIdx();
+    const [span, center] = { Hours: [1, d + 0.45], Days: [9, d + 2], Weeks: [42, d], Months: [124, 45], Year: [365, D0 + 182.5] }[name];
+    this.ppd = clamp(this.w() / span, this.ppdMin(), this.ppdMax);
+    this.render();
+    this.sc.scrollLeft = this.x(center) - this.w() / 2;
+    this.drawAxis();
+  },
+  update() {
+    if (!this.ppd) return this.preset('Months');
+    this.ppd = clamp(this.ppd, this.ppdMin(), this.ppdMax);
+    this.render();
+  },
+  /** Redraw bars, fares and controls for the current state and scale. */
+  render() {
+    const p = this.ppd, d = depIdx(), x = i => this.x(i);
+    this.inner.style.width = `${(D1 - D0) * p}px`;
+    this.zoom.value = this.toSlider(p);
+    const bar = (id, cls, l, w, top, text) =>
+      `<button class="bar ${cls}${w < 72 ? ' tight' : ''}${S.sel === id ? ' sel' : ''}" data-sel="${id}" style="left:${l}px;width:${Math.max(w, 2)}px;top:${top}px" title="${text}"><span>${text}</span></button>`;
+    let h = '';
+    const vs = x(0), ve = x(VISA_DAYS);
+    h += bar('visa', 'visa', vs, ve - vs, 6, `E-visa · 90 days · ${fmt(0)} – ${fmt(89)}`);
+    h += `<div class="dl" style="left:${ve}px"></div><span class="dlab" style="left:${ve + 6}px;top:15px">Leave by ${fmt(89)}</span>`;
+    h += `<div class="track" style="left:${x(DEP_MIN)}px;width:${x(DEP_MAX + 1) - x(DEP_MIN)}px;top:50px"></div>`;
+    const ne = x(d + 0.33);
+    h += bar('vn', 'vn', vs, ne - vs, 50, `Vietnam · ${S.stayDays} days${showStay() ? ' · ' + usd(vnCost().total) : ''}`);
+    h += `<div class="handle" id="g-handle" style="left:${ne - 16}px;top:50px" role="slider" tabindex="0" aria-label="Last day in Vietnam" aria-valuemin="60" aria-valuemax="90" aria-valuenow="${S.stayDays}" aria-valuetext="${fmt(d)}"></div>`;
+    ['th', 'tw'].forEach((k, n) => {
+      const R = ROUTES[k], top = (2 + n) * 44 + 6, f0 = x(d + R.dep / 24), fw = Math.max(4, R.dur / 24 * p);
+      const s0 = f0 + fw, s1 = x(d + OPT_NIGHTS + 0.5), st = stayCost(k, d, OPT_NIGHTS), fa = fare(k, d);
+      h += bar(k, k, s0, s1 - s0, top, `${PLACES[k].city} · 10 nights${showStay() ? ' · ' + usd(st.total) : ''}`);
+      const id = `fare:${k}:${d}`;
+      if (fw > 170) {
+        h += `<button class="bar fl wide${S.sel === id ? ' sel' : ''}" data-sel="${id}" style="left:${f0}px;width:${fw}px;top:${top + 5}px"><span>${R.code} ${hhmm(R.dep)}–${hhmm(R.dep + R.dur + R.tz)}${showTravel() ? ' · ' + usd(fa) : ''}</span></button>`;
+      } else {
+        h += `<button class="bar fl" data-sel="${id}" style="left:${f0}px;width:${fw}px;top:${top + 11}px" aria-label="${R.code} flight"></button>`;
+        h += `<button class="ftag" data-sel="${id}" style="left:${f0 - 4}px;top:${top + 6}px">${PLANE}${showTravel() ? usd(fa) : ''}</button>`;
+      }
+    });
+    ['th', 'tw'].forEach((k, n) => {
+      const [lo, hi] = fareRange(k), top = 182 + n * 24;
+      h += `<span class="fcode" style="left:${x(DEP_MIN) - 6}px;top:${top}px">${PLACES[k].code}</span>`;
+      for (let i = DEP_MIN; i <= DEP_MAX; i++) {
+        const v = fare(k, i), c = heat(v, lo, hi);
+        h += `<button class="fc${c.cls}${i === d ? ' on' : ''}${showTravel() ? '' : ' off'}" data-dep="${i}" data-sel="fare:${k}:${i}" style="left:${x(i)}px;width:${p}px;top:${top}px;${c.style}" aria-label="${ROUTES[k].code} ${fmt(i)} ${usd(v)}">${showTravel() && p >= 36 ? usd(v) : ''}</button>`;
+      }
+    });
+    h += `<div class="today" style="left:${x(TODAY + NOW_H / 24)}px"></div>`;
+    this.bars.innerHTML = h;
+    this.drawAxis();
+  },
+  /** Redraw the axis, gridlines and weekend shading for the visible window only. */
+  drawAxis() {
+    const p = this.ppd, sl = this.sc.scrollLeft, w = this.w();
+    const a = Math.max(D0, sl / p + D0 - 1), b = Math.min(D1, (sl + w) / p + D0 + 1);
+    const { k, n, minor, major } = axisTicks(a, b, p);
+    let ax = '', gr = '';
+    if ((k === 'h' || k === 'd') && p >= 14) {
+      for (let i = Math.floor(a); i <= b; i++) { const wd = dateOf(i).getUTCDay(); if (wd === 0 || wd === 6) gr += `<i class="we" style="left:${this.x(i)}px;width:${p}px"></i>`; }
+    }
+    minor.forEach(([i, lab]) => { const X = this.x(i); ax += `<i class="tk" style="left:${X}px"></i><span class="tkl" style="left:${X + 4}px">${lab}</span>`; gr += `<i class="gl" style="left:${X}px"></i>`; });
+    major.forEach(([i, lab], j) => {
+      const X = this.x(i), next = major[j + 1] ? this.x(major[j + 1][0]) : Infinity;
+      const L = Math.max(X + 6, Math.min(sl + 6, next - 120));
+      ax += `<span class="mj" style="left:${L}px">${lab}</span>`;
+      gr += `<i class="gl m" style="left:${X}px"></i>`;
+    });
+    ax += `<span class="todaytag" style="left:${this.x(TODAY + NOW_H / 24)}px">Today</span>`;
+    [44, 88, 132, 176].forEach(t => { gr += `<i class="hl" style="top:${t}px"></i>`; });
+    this.axis.innerHTML = ax;
+    this.grid.innerHTML = gr;
+    const name = { h: 'Hours', d: 'Days', w: 'Weeks', m: n === 3 ? 'Quarters' : 'Months', y: 'Years' }[k];
+    $('#g-scale').textContent = name;
+    const match = { Hours: 'Hours', Days: 'Days', Weeks: 'Weeks', Months: 'Months', Quarters: 'Year', Years: 'Year' }[name];
+    this.pre.querySelectorAll('button').forEach(btn => btn.setAttribute('aria-pressed', String(btn.dataset.p === match)));
+  },
+};
+
+/* ---------- View 2: day scroll ---------- */
+
+const VD1 = idxOf(2027, 3, 1);
+
+const V = {
+  z: 'Days',
+  /** @param {HTMLElement} el */
+  mount(el) {
+    el.innerHTML = `
+<div class="tools">
+  <div class="seg" id="v-z" role="group" aria-label="Row size">${['Months', 'Weeks', 'Days'].map(z => `<button data-z="${z}">${z}</button>`).join('')}</div>
+  <span class="hint">Drag the tab under the green bar. Tap a fare to leave that day.</span>
+</div>
+<div class="v-scroll" id="v-scroll"><div class="v-head" id="v-head"></div><div class="v-inner" id="v-inner"></div></div>`;
+    this.sc = $('#v-scroll', el); this.inner = $('#v-inner', el); this.head = $('#v-head', el);
+    this.syncZ = segment($('#v-z', el), 'z', () => this.z, z => { const c = this.center(); this.z = z; this.update(); this.centerOn(c); });
+    el.addEventListener('pointerdown', e => {
+      if (e.target.id !== 'v-handle') return;
+      dragDep(e, (cx, cy) => (cy - this.inner.getBoundingClientRect().top) / this.rh() + D0 - 0.5);
+    });
+    el.addEventListener('keydown', e => {
+      if (e.target.id !== 'v-handle') return;
+      const step = { ArrowUp: -1, ArrowDown: 1 }[e.key];
+      if (step) { e.preventDefault(); setDep(depIdx() + step); }
+    });
+    this.first = true;
+  },
+  rh() { return { Months: 6, Weeks: 16, Days: 44 }[this.z]; },
+  centerOn(i) { this.sc.scrollTop = (i - D0) * this.rh() - this.sc.clientHeight / 2 + 30; },
+  center() { return (this.sc.scrollTop + this.sc.clientHeight / 2 - 30) / this.rh() + D0; },
+  update() {
+    this.syncZ();
+    const rh = this.rh(), W = this.inner.clientWidth || 340, d = depIdx(), y = i => (i - D0) * rh;
+    const days = this.z === 'Days', gap = 6, gut = days ? 64 : 48, pc = days ? clamp(W * 0.24, 92, 124) : 30, vw = 16;
+    const lw = Math.max(30, (W - gut - vw - pc - gap * 5) / 3);
+    const L = { visa: gut + gap }; L.vn = L.visa + vw + gap; L.th = L.vn + lw + gap; L.tw = L.th + lw + gap; L.pc = L.tw + lw + gap;
+    this.head.innerHTML = [['DATE', 8, gut - 8], ['SGN', L.vn, lw], ['BKK', L.th, lw], ['TPE', L.tw, lw], ['FARES', L.pc, pc]]
+      .map(([t, l, w]) => `<span style="left:${l}px;width:${w}px;${t === 'DATE' ? 'text-align:left' : ''}">${t}</span>`).join('');
+    this.inner.style.height = `${y(VD1)}px`;
+    this.inner.style.setProperty('--rh', `${rh}px`);
+    this.inner.classList.toggle('lined', days);
+    let h = '';
+    if (days) for (let i = D0; i < VD1; i++) { const wd = dateOf(i).getUTCDay(); if (wd === 0 || wd === 6) h += `<div class="vwe" style="top:${y(i)}px;height:${rh}px"></div>`; }
+    monthStarts(D0, VD1 - 1).forEach(s => { h += `<div class="vmon" style="top:${y(s.i)}px"></div>`; });
+    for (let i = D0; i < VD1; i++) {
+      const dt = dateOf(i), first = dt.getUTCDate() === 1;
+      let lab = '';
+      if (days) lab = first ? `<b>${MON[dt.getUTCMonth()]} 1</b>` : `${WD[dt.getUTCDay()]} ${dt.getUTCDate()}`;
+      else if (first) lab = `<b>${MON[dt.getUTCMonth()]}</b>`;
+      else if (this.z === 'Weeks' && dt.getUTCDay() === 1 && dt.getUTCDate() > 3) lab = String(dt.getUTCDate());
+      if (lab) h += `<span class="vday" style="top:${y(i + 0.5)}px">${lab}</span>`;
+    }
+    const vbar = (id, cls, l, w, t0, t1, text) => `<button class="vbar ${cls}${S.sel === id ? ' sel' : ''}" data-sel="${id}" style="left:${l}px;width:${w}px;top:${t0}px;height:${t1 - t0}px" title="${text}"><span>${text}</span></button>`;
+    h += vbar('visa', 'visa', L.visa, vw, y(0), y(VISA_DAYS), '90-day e-visa');
+    h += `<div class="vtrack" style="left:${L.vn}px;width:${lw}px;top:${y(DEP_MIN)}px;height:${y(DEP_MAX + 1) - y(DEP_MIN)}px"></div>`;
+    h += vbar('vn', 'vn', L.vn, lw, y(0), y(d + 0.5), `Vietnam · ${S.stayDays} days${showStay() ? ' · ' + usd(vnCost().total) : ''}`);
+    h += `<div class="vhandle" id="v-handle" style="left:${L.vn}px;width:${lw}px;top:${y(d + 0.5) - 6}px" role="slider" tabindex="0" aria-label="Last day in Vietnam" aria-valuemin="60" aria-valuemax="90" aria-valuenow="${S.stayDays}" aria-valuetext="${fmt(d)}"></div>`;
+    ['th', 'tw'].forEach(k => {
+      const st = stayCost(k, d, OPT_NIGHTS);
+      h += vbar(k, k, L[k], lw, y(d + 0.5), y(d + OPT_NIGHTS + 0.5), `${PLACES[k].city} · 10 nights${showStay() ? ' · ' + usd(st.total) : ''}`);
+      h += `<button class="vtag" data-sel="fare:${k}:${d}" style="left:${L[k] + lw / 2}px;top:${y(d + 0.5) + 2}px">${PLANE}${showTravel() && days ? usd(fare(k, d)) : ''}</button>`;
+    });
+    if (showTravel()) {
+      const R = { th: fareRange('th'), tw: fareRange('tw') };
+      for (let i = DEP_MIN; i <= DEP_MAX; i++) {
+        const chip = k => { const v = fare(k, i), c = heat(v, ...R[k]); return `<button class="vchip${c.cls}${i === d ? ' on' : ''}" data-dep="${i}" data-sel="fare:${k}:${i}" style="${c.style}" aria-label="${ROUTES[k].code} ${fmt(i)} ${usd(v)}">${days ? `${PLACES[k].code} ${usd(v)}` : ''}</button>`; };
+        h += `<div class="vfare${days ? ' col' : ''}" style="left:${L.pc}px;width:${pc - 6}px;top:${y(i) + (days ? 2 : 0)}px;height:${rh - (days ? 4 : 1)}px">${chip('th')}${chip('tw')}</div>`;
+      }
+    }
+    h += `<div class="vline" style="top:${y(TODAY + NOW_H / 24)}px"><span>TODAY</span></div>`;
+    h += `<div class="vline dl" style="top:${y(VISA_DAYS)}px"><span>LEAVE BY ${fmt(89).toUpperCase()}</span></div>`;
+    this.inner.innerHTML = h;
+    if (this.first) { this.first = false; requestAnimationFrame(() => this.centerOn(d + 4)); }
+  },
+};
+
+/* ---------- View 3: fare calendar ---------- */
+
+const C = {
+  dest: 'th', span: 2,
+  /** @param {HTMLElement} el */
+  mount(el) {
+    el.innerHTML = `
+<div class="tools">
+  <div class="seg" id="c-dest" role="group" aria-label="Destination">${['th', 'tw'].map(k => `<button data-k="${k}">${PLACES[k].city}</button>`).join('')}</div>
+  <div class="seg" id="c-span" role="group" aria-label="Months shown">${[[2, '2 months'], [4, '4 months'], [12, 'Year']].map(([n, t]) => `<button data-n="${n}">${t}</button>`).join('')}</div>
+</div>
+<div class="c-top" id="c-top"></div>
+<div class="c-months" id="c-months"></div>
+<div class="c-best card" id="c-best"></div>`;
+    this.syncDest = segment($('#c-dest', el), 'k', () => this.dest, k => { this.dest = k; this.update(); });
+    this.syncSpan = segment($('#c-span', el), 'n', () => this.span, n => { this.span = +n; this.update(); });
+  },
+  update() {
+    this.syncDest(); this.syncSpan();
+    const k = this.dest, d = depIdx(), city = PLACES[k].city;
+    const mode = showTravel() ? 'fare' : showStay() ? 'stay' : 'none';
+    const win = mode === 'stay' ? [DEP_MIN, DEP_MAX + OPT_NIGHTS] : [DEP_MIN, DEP_MAX];
+    const val = i => mode === 'fare' ? fare(k, i) : nightRate(k, i) + PLACES[k].daily;
+    const vals = []; for (let i = win[0]; i <= win[1]; i++) vals.push(val(i));
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const what = mode === 'fare' ? `Flight ${ROUTES[k].code} if you leave that day` : mode === 'stay' ? `Nightly cost in ${city} (room + daily spend)` : 'Costs hidden';
+    $('#c-top').innerHTML = `${mode === 'none' ? '' : `<span class="c-scale"><span class="mono">${usd(lo)}</span><i></i><span class="mono">${usd(hi)}</span></span>`}<span>${what}</span>
+      <span class="c-key"><i class="b-visa"></i>Visa</span><span class="c-key"><i class="b-vn"></i>Vietnam</span><span class="c-key"><i class="b-${k}"></i>${city}</span>`;
+    const first = this.span === 12 ? [2026, 9] : this.span === 4 ? [2026, 10] : [2026, 11];
+    const wrap = $('#c-months'); wrap.classList.toggle('year', this.span === 12);
+    let h = '';
+    for (let mi = 0; mi < this.span; mi++) {
+      const dt = new Date(Date.UTC(first[0], first[1] + mi, 1)), y = dt.getUTCFullYear(), m = dt.getUTCMonth();
+      const start = idxOf(y, m, 1), len = idxOf(y, m + 1, 1) - start, pad = (dt.getUTCDay() + 6) % 7;
+      let cells = WD.slice(1).concat(WD[0]).map(w => `<span class="c-wd">${this.span === 12 ? w[0] : w}</span>`).join('') + '<span></span>'.repeat(pad);
+      for (let i = start; i < start + len; i++) {
+        const inWin = mode !== 'none' && i >= win[0] && i <= win[1], pick = i >= DEP_MIN && i <= DEP_MAX;
+        const c = inWin ? heat(val(i), lo, hi) : { style: '', cls: '' };
+        const band = (on, cls) => `<i class="${on ? cls : 'b-off'}"></i>`;
+        cells += `<button class="c-cell${inWin ? ' heat' + c.cls : ''}${i === d ? ' dep' : ''}${i === TODAY ? ' today' : ''}" style="${c.style}" ${pick ? `data-dep="${i}" data-sel="fare:${k}:${i}"` : 'tabindex="-1"'} aria-label="${fmt(i, { weekday: 'long' })}${inWin ? ' ' + usd(val(i)) : ''}">
+          <span class="n">${dateOf(i).getUTCDate()}</span>${i === d ? PLANE : ''}${inWin ? `<span class="v">${usd(val(i))}</span>` : ''}
+          <span class="bands">${band(i >= 0 && i < VISA_DAYS, 'b-visa')}${band(i >= 0 && i <= d, 'b-vn')}${band(i >= d && i <= d + OPT_NIGHTS, 'b-' + k)}</span></button>`;
+      }
+      h += `<section class="c-month card"><h4>${MONL[m]} ${y}</h4><div class="c-grid">${cells}</div></section>`;
+    }
+    wrap.innerHTML = h;
+    const best = $('#c-best');
+    if (mode === 'none') { best.innerHTML = '<h3>Cheapest days to leave</h3><p>Turn costs back on to rank departure days.</p>'; return; }
+    const score = i => mode === 'fare' && S.filter === 'travel' ? fare(k, i) : costOf(stayCost(k, i, OPT_NIGHTS).total, fare(k, i));
+    const ranked = []; for (let i = DEP_MIN; i <= DEP_MAX; i++) ranked.push([i, score(i)]);
+    ranked.sort((p, q) => p[1] - q[1]);
+    const label = { all: 'flight + 10 nights', stays: '10 nights only', travel: 'flight only' }[S.filter];
+    best.innerHTML = `<h3>Cheapest days to leave for ${city}</h3><p>Ranked by ${label}. Now: ${fmt(d, { weekday: 'short' })} · ${usd(score(d))}</p>` +
+      ranked.slice(0, 4).map(([i, v]) => `<button class="pickbtn${i === d ? ' on' : ''}" data-dep="${i}">${fmt(i, { weekday: 'short' })} · ${usd(v)}</button>`).join('');
+  },
+};
+
+/* ---------- View 4: compare plans ---------- */
+
+/**
+ * Round tick values covering [lo, hi].
+ * @param {number} lo
+ * @param {number} hi
+ * @param {number} [count=4] Rough number of ticks.
+ * @returns {number[]}
+ */
+function niceTicks(lo, hi, count = 4) {
+  const raw = (hi - lo) / count, mag = 10 ** Math.floor(Math.log10(raw)), f = raw / mag;
+  const step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag, out = [];
+  for (let v = Math.floor(lo / step) * step; v <= hi + step * 0.5; v += step) out.push(v);
+  return out;
+}
+
+const SC = {
+  /** @param {HTMLElement} el */
+  mount(el) {
+    el.innerHTML = `<div class="s-list" id="s-list"></div>
+<div class="s-chart card"><h3>Total by departure day</h3><p id="s-sub"></p><div id="s-chart"></div></div>`;
+    const box = $('#s-chart', el);
+    const pick = e => { if (!this.geo) return; const r = box.getBoundingClientRect(); setDep(Math.round(this.geo.inv(e.clientX - r.left))); };
+    box.addEventListener('pointerdown', e => { pick(e); const mv = ev => pick(ev), up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); }; addEventListener('pointermove', mv); addEventListener('pointerup', up); });
+  },
+  update() {
+    const d = depIdx(), hide = S.filter === 'none';
+    const tag = { all: 'stays + flights', stays: 'stays only', travel: 'flights only', none: 'costs hidden' }[S.filter];
+    const now = PLANS.map(p => planCost(p, d));
+    const minTotal = Math.min(...now.map(c => c.total));
+    const scale = i => `${(i / (DEP_MAX + OPT_NIGHTS + 1)) * 100}%`;
+    $('#s-list').innerHTML = PLANS.map((p, j) => {
+      const c = now[j];
+      let best = { i: d, t: c.total };
+      for (let i = DEP_MIN; i <= DEP_MAX; i++) { const t = planCost(p, i).total; if (t < best.t) best = { i, t }; }
+      const segs = [`<button class="s-seg vn" data-sel="vn" style="left:0;width:${scale(d)}" aria-label="Vietnam stay"></button>`]
+        .concat(c.segs.map(s => `<button class="s-seg ${s.k}" data-sel="${s.k}" style="left:${scale(s.start)};width:${scale(s.nights)}" aria-label="${PLACES[s.k].city} stay"></button>`)).join('');
+      return `<article class="s-row card${!hide && c.total === minTotal ? ' best' : ''}">
+        <div class="s-name"><span class="sw" style="--c:${p.c}"></span><h3>${p.name}</h3>${!hide && c.total === minTotal ? '<span class="pill">Lowest</span>' : ''}</div>
+        <div class="s-tl">${segs}<i class="s-visa" style="left:${scale(VISA_DAYS)}" title="Visa ends"></i></div>
+        <div class="s-break">${hide ? `${fmt(d)} → ${fmt(c.end)}` : `Stays ${usd(c.stay)} · Flights ${usd(c.fares)} · ${fmt(d)} → ${fmt(c.end)}`}</div>
+        <div class="s-total"><b>${hide ? '—' : usd(c.total)}</b><small>${tag}</small></div>
+        ${!hide && best.i !== d ? `<button class="s-apply" data-dep="${best.i}">Cheapest: leave ${fmt(best.i, { weekday: 'short' })} for ${usd(best.t)}, saves ${usd(c.total - best.t)}</button>` : ''}
+      </article>`;
+    }).join('');
+    $('#s-sub').textContent = hide ? 'Turn costs back on to compare totals.' : `After Vietnam, ${tag}. Tap or drag the chart to change your departure day.`;
+    this.chart(d, hide);
+  },
+  /**
+   * Draw the totals-by-departure chart.
+   * @param {number} d Current departure day.
+   * @param {boolean} hide Costs hidden.
+   */
+  chart(d, hide) {
+    const box = $('#s-chart'), W = box.clientWidth || 600, H = 230, narrow = W < 480;
+    const m = { l: 46, r: narrow ? 64 : 86, t: 12, b: 26 };
+    const series = PLANS.map(p => { const v = []; for (let i = DEP_MIN; i <= DEP_MAX; i++) v.push(planCost(p, i).total); return v; });
+    const all = series.flat(), yt = niceTicks(Math.min(...all), Math.max(...all));
+    const y0 = yt[0], y1 = yt[yt.length - 1];
+    const X = i => m.l + (i - DEP_MIN) / (DEP_MAX - DEP_MIN) * (W - m.l - m.r);
+    const Y = v => m.t + (1 - (v - y0) / (y1 - y0)) * (H - m.t - m.b);
+    this.geo = { inv: px => DEP_MIN + (px - m.l) / (W - m.l - m.r) * (DEP_MAX - DEP_MIN) };
+    let s = `<svg width="${W}" height="${H}" role="img" aria-label="Plan totals by departure day">`;
+    if (hide) { box.innerHTML = s + `<text class="svg-m" x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="12">Costs hidden</text></svg>`; return; }
+    yt.forEach(v => { s += `<line class="svg-g" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="svg-m" x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end" font-size="10.5">${usd(v)}</text>`; });
+    for (let i = DEP_MIN; i <= DEP_MAX; i += 7) s += `<text class="svg-m" x="${X(i)}" y="${H - 8}" text-anchor="middle" font-size="10.5">${fmt(i)}</text>`;
+    s += `<line x1="${X(d)}" x2="${X(d)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--ink)" stroke-width="1.5"/>`;
+    const ends = series.map((v, j) => ({ j, y: Y(v[v.length - 1]) })).sort((a, b) => a.y - b.y);
+    for (let q = 1; q < ends.length; q++) if (ends[q].y - ends[q - 1].y < 14) ends[q].y = ends[q - 1].y + 14;
+    series.forEach((v, j) => {
+      const pts = v.map((val, n) => `${X(DEP_MIN + n).toFixed(1)},${Y(val).toFixed(1)}`).join(' ');
+      s += `<polyline points="${pts}" fill="none" stroke="${PLANS[j].c}" stroke-width="2.2" stroke-linejoin="round"/>`;
+      s += `<circle cx="${X(d)}" cy="${Y(v[d - DEP_MIN])}" r="4.5" fill="${PLANS[j].c}" stroke="var(--surface)" stroke-width="2"/>`;
+    });
+    ends.forEach(e => { s += `<text class="svg-t" x="${W - m.r + 8}" y="${e.y + 4}" font-size="11.5" font-weight="600" fill="${PLANS[e.j].c}" style="fill:${PLANS[e.j].c}">${PLANS[e.j].short}</text>`; });
+    box.innerHTML = s + '</svg>';
+  },
+};
+
+/* ---------- View 5: route map ---------- */
+
+/**
+ * Project latitude/longitude onto the 520×440 map frame (plain equirectangular).
+ * @param {[number, number]} ll [lat, lon]
+ * @returns {[number, number]}
+ */
+const proj = ([lat, lon]) => [(lon - 98) / 26 * 520, (27 - lat) / 20 * 440];
+
+const MP = {
+  dest: 'th',
+  /** @param {HTMLElement} el */
+  mount(el) {
+    el.innerHTML = `<div class="m-split">
+  <div class="card m-map" id="m-map"></div>
+  <div class="m-side">
+    <div class="tools"><div class="seg" id="m-dest" role="group" aria-label="Destination">${['th', 'tw'].map(k => `<button data-k="${k}">Then ${PLACES[k].city}</button>`).join('')}</div></div>
+    <ol class="m-itin card" id="m-itin"></ol>
+    <div class="card m-scrub"><div class="m-scrub-head"><b>Departure day</b><span id="m-dlab" class="mono"></span></div><div id="m-spark"></div></div>
+  </div>
+</div>`;
+    this.syncDest = segment($('#m-dest', el), 'k', () => this.dest, k => { this.dest = k; this.update(); });
+    $('#m-map', el).addEventListener('click', e => { const t = e.target.closest('[data-mdest]'); if (t) { this.dest = t.dataset.mdest; this.update(); } });
+    const box = $('#m-spark', el);
+    const pick = e => { if (!this.geo) return; const r = box.getBoundingClientRect(); setDep(Math.round(this.geo.inv(e.clientX - r.left))); };
+    box.addEventListener('pointerdown', e => { pick(e); const mv = ev => pick(ev), up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); }; addEventListener('pointermove', mv); addEventListener('pointerup', up); });
+  },
+  update() {
+    this.syncDest();
+    const d = depIdx(), k = this.dest;
+    this.map(d, k); this.itin(d, k); this.spark(d);
+  },
+  /** Draw the abstract route map. */
+  map(d, k) {
+    let s = '<svg viewBox="0 0 520 440" role="img" aria-label="Route map from Saigon to Bangkok and Taipei">';
+    [100, 105, 110, 115, 120].forEach(lon => { const [x] = proj([0, lon]); s += `<line class="svg-g" x1="${x}" x2="${x}" y1="0" y2="440" stroke-dasharray="2 4"/><text class="svg-m" x="${x + 4}" y="432" font-size="12">${lon}°E</text>`; });
+    [10, 15, 20, 25].forEach(lat => { const [, y] = proj([lat, 0]); s += `<line class="svg-g" x1="0" x2="520" y1="${y}" y2="${y}" stroke-dasharray="2 4"/><text class="svg-m" x="6" y="${y - 4}" font-size="12">${lat}°N</text>`; });
+    [['THAILAND', 16.2, 101], ['LAOS', 19.8, 102.6], ['CAMBODIA', 12.6, 104.9], ['VIETNAM', 16.6, 107.6], ['PHILIPPINES', 15.2, 120.6], ['South China Sea', 14.2, 114.2]].forEach(([t, lat, lon]) => {
+      const [x, y] = proj([lat, lon]);
+      s += `<text class="svg-m" x="${x}" y="${y}" text-anchor="middle" font-size="13" letter-spacing="${t === t.toUpperCase() ? 2 : 0}" opacity=".7"${t === t.toUpperCase() ? '' : ' font-style="italic"'}>${t}</text>`;
+    });
+    const sgn = proj(PLACES.vn.ll);
+    ['th', 'tw'].forEach(r => {
+      const p1 = proj(PLACES[r].ll), dx = p1[0] - sgn[0], dy = p1[1] - sgn[1], len = Math.hypot(dx, dy);
+      const c = [(sgn[0] + p1[0]) / 2 - dy / len * len * 0.2, (sgn[1] + p1[1]) / 2 + dx / len * len * 0.2];
+      const mid = [0.25 * sgn[0] + 0.5 * c[0] + 0.25 * p1[0], 0.25 * sgn[1] + 0.5 * c[1] + 0.25 * p1[1]];
+      const on = r === k, txt = `${showTravel() ? usd(fare(r, d)) + ' · ' : ''}${dur(ROUTES[r].dur)}`, w = txt.length * 8.4 + 18;
+      s += `<path class="route ${on ? 'on' : 'off'}" d="M${sgn[0]},${sgn[1]} Q${c[0]},${c[1]} ${p1[0]},${p1[1]}" stroke="${PLACES[r].c}" data-sel="fare:${r}:${d}" data-mdest="${r}"/>`;
+      s += `<g data-sel="fare:${r}:${d}" data-mdest="${r}" style="cursor:pointer;opacity:${on ? 1 : 0.6}"><rect x="${mid[0] - w / 2}" y="${mid[1] - 14}" width="${w}" height="28" rx="14" fill="var(--surface)" stroke="${PLACES[r].c}" stroke-width="1.5"/>
+        <text class="svg-t" x="${mid[0]}" y="${mid[1] + 5}" text-anchor="middle" font-size="14" font-family="var(--f-mono)" font-weight="600">${txt}</text></g>`;
+    });
+    const nodes = [['vn', `${S.stayDays} days`, 14, 40, 'start'], ['th', '10 nights', 0, 44, 'middle'], ['tw', '10 nights', -20, 6, 'end']];
+    nodes.forEach(([p, sub, ox, oy, anchor]) => {
+      const [x, y] = proj(PLACES[p].ll), nights = p === 'vn' ? S.stayDays : 10, r = 7 + Math.sqrt(nights) * 1.3;
+      const dim = p !== 'vn' && p !== k;
+      s += `<g data-sel="${p}" ${p === 'vn' ? '' : `data-mdest="${p}"`} style="cursor:pointer;opacity:${dim ? 0.55 : 1}">
+        <circle cx="${x}" cy="${y}" r="${r + 5}" fill="${PLACES[p].c}" opacity=".18"/><circle cx="${x}" cy="${y}" r="${r}" fill="${PLACES[p].c}" stroke="var(--surface)" stroke-width="2.5"/>
+        <text class="svg-t" x="${x + ox}" y="${y + oy - 16}" text-anchor="${anchor}" font-size="18" font-weight="600">${p === 'vn' ? 'Saigon' : PLACES[p].city}</text>
+        <text class="svg-m" x="${x + ox}" y="${y + oy + 2}" text-anchor="${anchor}" font-size="13.5">${PLACES[p].code} · ${sub}</text></g>`;
+    });
+    $('#m-map').innerHTML = s + '</svg>';
+  },
+  /** Fill the itinerary list. */
+  itin(d, k) {
+    const R = ROUTES[k], vn = vnCost(), st = stayCost(k, d, OPT_NIGHTS), fa = fare(k, d), hide = S.filter === 'none';
+    const amt = (v, show) => hide || !show ? '' : `<span class="amt">${usd(v)}</span>`;
+    $('#m-itin').innerHTML = `
+      <li><button data-sel="vn"><span class="dot" style="--c:var(--vn)"></span><span><b>Vietnam</b><small>${fmt(0)} – ${fmt(d)} · ${S.stayDays} days</small></span>${amt(vn.total, showStay())}</button></li>
+      <li><button data-sel="fare:${k}:${d}"><span class="dot fl">${PLANE}</span><span><b>${R.code}</b><small>${fmt(d, { weekday: 'short' })} · ${hhmm(R.dep)} → ${hhmm(R.dep + R.dur + R.tz)}</small></span>${amt(fa, showTravel())}</button></li>
+      <li><button data-sel="${k}"><span class="dot" style="--c:${PLACES[k].c}"></span><span><b>${PLACES[k].city}</b><small>${fmt(d)} – ${fmt(d + OPT_NIGHTS)} · 10 nights</small></span>${amt(st.total, showStay())}</button></li>
+      ${hide ? '' : `<li class="tot"><span>After Vietnam</span><span>${usd(costOf(st.total, fa))}</span></li>`}`;
+  },
+  /** Draw the fare sparkline that doubles as a departure scrubber. */
+  spark(d) {
+    const box = $('#m-spark'), W = box.clientWidth || 320, H = 96, m = { l: 8, r: 8, t: 10, b: 22 };
+    const lo = Math.min(fareRange('th')[0], fareRange('tw')[0]), hi = Math.max(fareRange('th')[1], fareRange('tw')[1]);
+    const X = i => m.l + (i - DEP_MIN) / (DEP_MAX - DEP_MIN) * (W - m.l - m.r), Y = v => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b);
+    this.geo = { inv: px => DEP_MIN + (px - m.l) / (W - m.l - m.r) * (DEP_MAX - DEP_MIN) };
+    let s = `<svg width="${W}" height="${H}" role="img" aria-label="Fares by departure day">`;
+    ['th', 'tw'].forEach(r => {
+      const pts = []; for (let i = DEP_MIN; i <= DEP_MAX; i++) pts.push(`${X(i).toFixed(1)},${Y(fare(r, i)).toFixed(1)}`);
+      s += `<polyline points="${pts.join(' ')}" fill="none" stroke="${PLACES[r].c}" stroke-width="2" opacity="${r === this.dest ? 1 : 0.4}"/>`;
+    });
+    s += `<line x1="${X(d)}" x2="${X(d)}" y1="${m.t - 4}" y2="${H - m.b}" stroke="var(--ink)" stroke-width="1.5"/>`;
+    ['th', 'tw'].forEach(r => { s += `<circle cx="${X(d)}" cy="${Y(fare(r, d))}" r="4" fill="${PLACES[r].c}" stroke="var(--surface)" stroke-width="1.5"/>`; });
+    s += `<text class="svg-m" x="${m.l}" y="${H - 6}" font-size="10.5">${fmt(DEP_MIN)}</text><text class="svg-m" x="${W - m.r}" y="${H - 6}" font-size="10.5" text-anchor="end">${fmt(DEP_MAX)} · visa ends</text>`;
+    box.innerHTML = s + '</svg>';
+    $('#m-dlab').textContent = `${fmt(d, { weekday: 'short' })}${showTravel() ? ` · BKK ${usd(fare('th', d))} · TPE ${usd(fare('tw', d))}` : ''}`;
+  },
+};
+
+/* ---------- Detail sheet ---------- */
+
+/**
+ * Seven-day fare strip around a day, for picking a cheaper departure.
+ * @param {keyof ROUTES} r Route key.
+ * @param {number} center Day index.
+ * @returns {string} HTML.
+ */
+function nearby(r, center) {
+  const [lo, hi] = fareRange(r);
+  let h = '';
+  for (let i = center - 3; i <= center + 3; i++) {
+    if (i < DEP_MIN || i > DEP_MAX) { h += '<span></span>'; continue; }
+    const v = fare(r, i), c = heat(v, lo, hi), dt = dateOf(i);
+    h += `<button class="nb-c${c.cls}${i === depIdx() ? ' on' : ''}" style="${c.style}" data-dep="${i}" data-sel="fare:${r}:${i}"><small>${WD[dt.getUTCDay()]} ${dt.getUTCDate()}</small><b>${usd(v)}</b></button>`;
+  }
+  return `<div class="nb-h">${ROUTES[r].code} fares around ${fmt(center)}</div><div class="nb">${h}</div>`;
+}
+
+/**
+ * Content for the detail sheet of a selected item.
+ * @param {string} sel "visa" | "vn" | "th" | "tw" | "fare:<route>:<day>"
+ * @returns {{k:string,t:string,c:string,rows:[string,string][],extra?:string,note?:string}}
+ */
+function sheetFor(sel) {
+  const d = depIdx();
+  if (sel === 'visa') return {
+    k: 'Fixed · 90 days', t: 'Vietnam e-visa', c: 'var(--ink)',
+    rows: [['Valid', `${fmt(0)} – ${fmt(89, { year: 'numeric' })}`], ['Used so far', `${TODAY + 1} days`], ['You leave', `${fmt(d, { weekday: 'short' })} · day ${S.stayDays}`], ['Days left unused', `${89 - d}`]],
+    note: 'This bar never moves. The Vietnam stay can stretch up to its last day.',
+  };
+  if (sel === 'vn') {
+    const v = vnCost();
+    return {
+      k: 'Adjustable · 60–90 days', t: 'Vietnam', c: 'var(--vn)',
+      rows: [['Dates', `${fmt(0)} – ${fmt(d)}`], ['Length', `${S.stayDays} days`], ['Rooms', `${v.nights} × ${usd(PLACES.vn.night)} = ${usd(v.lodging)}`], ['Daily spend', `${S.stayDays} × ${usd(PLACES.vn.daily)} = ${usd(v.daily)}`], ['Total', usd(v.total)]],
+      extra: `<div class="steps"><button data-dep="${d - 1}" ${d <= DEP_MIN ? 'disabled' : ''}>One day shorter</button><button data-dep="${d + 1}" ${d >= DEP_MAX ? 'disabled' : ''}>One day longer</button></div>`,
+    };
+  }
+  if (sel === 'th' || sel === 'tw') {
+    const s = stayCost(sel, d, OPT_NIGHTS), f = fare(sel, d), R = ROUTES[sel];
+    return {
+      k: 'Option · 10 nights', t: PLACES[sel].city, c: PLACES[sel].c,
+      rows: [['Dates', `${fmt(d)} – ${fmt(d + OPT_NIGHTS)}`], ['Rooms', usd(s.lodging) + (s.holiday ? ` (${s.holiday} holiday nights)` : '')], ['Daily spend', `10 × ${usd(PLACES[sel].daily)} = ${usd(s.daily)}`], [`Flight ${R.code}`, usd(f)], ['Total', usd(s.total + f)]],
+      extra: nearby(sel, d),
+      note: s.holiday ? 'Rooms cost 35% more from Dec 24 to Jan 1 in this sample.' : '',
+    };
+  }
+  const [, r, iStr] = sel.split(':'), i = +iStr, R = ROUTES[r], [lo] = fareRange(r);
+  let cheapest = DEP_MIN; for (let j = DEP_MIN; j <= DEP_MAX; j++) if (fare(r, j) < fare(r, cheapest)) cheapest = j;
+  return {
+    k: 'Flight · one way', t: R.code, c: PLACES[r].c,
+    rows: [['Date', fmt(i, { weekday: 'short' })], ['Time', `${hhmm(R.dep)} → ${hhmm(R.dep + R.dur + R.tz)} (${dur(R.dur)})`], ['Fare', usd(fare(r, i))], ['Cheapest in window', `${fmt(cheapest)} · ${usd(lo)}`]],
+    extra: nearby(r, i),
+    note: i === d ? 'This is your current departure day.' : 'Tap a day above to leave Vietnam then.',
+  };
+}
+
+function renderSheet() {
+  const sh = $('#sheet');
+  if (!S.sel) { sh.hidden = true; return; }
+  const c = sheetFor(S.sel);
+  sh.hidden = false;
+  sh.style.setProperty('--c', c.c);
+  $('#sh-k').textContent = c.k;
+  $('#sh-t').textContent = c.t;
+  $('#sh-b').innerHTML = `<dl>${c.rows.map(([k, v]) => `<div${k === 'Total' ? ' class="total"' : ''}><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>${c.extra || ''}${c.note ? `<p class="sh-note">${c.note}</p>` : ''}`;
+}
+
+/* ---------- Shell ---------- */
+
+const VIEWS = [
+  { id: 'timeline', name: 'Zoom timeline', obj: G,
+    idea: 'A horizontal Gantt that zooms from hours to a year. Visa, stay and options are lanes, with a fare strip underneath for every possible departure day.',
+    trade: 'Best overview on a laptop. On a phone it means sideways scrolling and thinner bars.' },
+  { id: 'scroll', name: 'Day scroll', obj: V,
+    idea: 'Time runs downward like a feed, built for the phone. Switch rows between months, weeks and days; fares sit beside each day.',
+    trade: 'Easy to thumb through, but you see a few weeks at a time rather than the whole year.' },
+  { id: 'calendar', name: 'Fare calendar', obj: C,
+    idea: 'Month grids colored by flight price, or by nightly cost when you filter to stays. Visa, stay and trip run as bands under each date.',
+    trade: 'Fastest way to spot a cheap day. Overlapping plans get cramped in small cells.' },
+  { id: 'compare', name: 'Compare plans', obj: SC,
+    idea: 'Each plan is a row with its total. A chart shows how every total moves as you slide your departure day.',
+    trade: 'Answers "which is cheaper, and when" best, but you set plans up instead of sketching freely.' },
+  { id: 'map', name: 'Route map', obj: MP,
+    idea: 'An abstract map with fare-labeled routes, beside the itinerary and a departure scrubber.',
+    trade: 'Feels the most like travel, but with three places the map adds little. It pays off with many stops.' },
+];
+
+let current = null;
+
+/** Draw controls, summary, the active view and the sheet. Keeps keyboard focus on a re-drawn handle. */
+function renderAll() {
+  const focusId = document.activeElement && document.activeElement.id;
+  const d = depIdx();
+  $('#stay').value = S.stayDays;
+  $('#stay-out').textContent = `${S.stayDays} days · leave ${fmt(d)}`;
+  document.querySelectorAll('#filter .chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === S.filter)));
+  const tag = { all: 'stay + flight', stays: 'stay only', travel: 'flight only', none: 'costs hidden' }[S.filter];
+  const opt = (k, j) => S.filter === 'none' ? '' : `<span class="sum-opt"><span class="sw" style="--c:${PLACES[k].c}"></span>Then ${PLACES[k].city} <b>${usd(planCost(PLANS[j], d).total)}</b></span>`;
+  $('#summary').innerHTML = `<span class="sum-main"><span class="mono">LEAVE SGN</span><b>${fmt(d, { weekday: 'short' })}</b><span>day ${S.stayDays} of 90 · ${89 - d} visa days spare</span></span>${opt('th', 0)}${opt('tw', 1)}<span class="sum-tag">${tag}</span>`;
+  if (current) current.obj.update();
+  renderSheet();
+  if (focusId && /handle$/.test(focusId)) document.getElementById(focusId)?.focus({ preventScroll: true });
+}
+
+/**
+ * Switch to a view by id.
+ * @param {string} id View id.
+ */
+function show(id) {
+  current = VIEWS.find(v => v.id === id) || VIEWS[0];
+  S.view = current.id;
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.v === current.id)));
+  $('#viewinfo').innerHTML = `<p class="idea"><span class="lbl">The idea</span>${current.idea}</p><p class="trade"><span class="lbl">Tradeoff</span>${current.trade}</p>`;
+  current.obj.mount($('#stage'));
+  renderAll();
+}
+
+$('#tabs').innerHTML = VIEWS.map((v, i) => `<button class="tab" role="tab" data-v="${v.id}"><span class="k">${i + 1}</span>${v.name}</button>`).join('');
+$('#tabs').addEventListener('click', e => { const t = e.target.closest('.tab'); if (t) { if (location.hash !== '#' + t.dataset.v) location.hash = t.dataset.v; else show(t.dataset.v); } });
+addEventListener('hashchange', () => show(location.hash.slice(1)));
+$('#stay').addEventListener('input', e => set({ stayDays: +e.target.value }));
+$('#filter').addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) set({ filter: b.dataset.f }); });
+$('#sh-x').addEventListener('click', () => set({ sel: null }));
+addEventListener('keydown', e => { if (e.key === 'Escape' && S.sel) set({ sel: null }); });
+document.addEventListener('click', e => {
+  if (justDragged) return;
+  const dep = e.target.closest('[data-dep]'), sel = e.target.closest('[data-sel]');
+  if (dep && !dep.disabled) setDep(+dep.dataset.dep);
+  if (sel) set({ sel: sel.dataset.sel });
+});
+let lastW = 0;
+new ResizeObserver(([en]) => {
+  const w = Math.round(en.contentRect.width);
+  if (w !== lastW && current) { lastW = w; current.obj.update(); }
+}).observe($('#stage'));
+
+show(location.hash.slice(1) || 'timeline');
+</script>
+
+</body></html>
