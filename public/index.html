@@ -2,32 +2,68 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ECF1F0">
   <title>Span</title>
-  <style>
-    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-    body { margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: 16px; }
-    main { text-align: center; }
-    h1 { margin: 0 0 .25rem; font-size: 2.5rem; letter-spacing: -.02em; }
-    p { margin: .25rem 0; opacity: .75; }
-    code { font-size: .9em; }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="/styles.css">
+  <script>
+    // Apply a saved theme before first paint so the page doesn't flash.
+    try { const t = localStorage.getItem('span-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
+  </script>
+  <script type="module" src="/app/main.js"></script>
 </head>
 <body>
-  <main>
-    <h1>Span</h1>
-    <p>Travel timeline. The UI is coming soon.</p>
-    <p>API: <code id="status">checking…</code></p>
-  </main>
-  <script type="module">
-    const el = document.getElementById("status");
-    try {
-      const res = await fetch("/api/health");
-      const { ok, db } = await res.json();
-      el.textContent = ok ? `ok, database ${db ? "ok" : "unreachable"}` : "error";
-    } catch {
-      el.textContent = "unreachable";
-    }
-  </script>
+  <div class="wrap">
+    <header class="top">
+      <h1>Span</h1>
+      <div class="planbar">
+        <label class="sr" for="plan">Plan</label>
+        <select id="plan" aria-label="Plan"></select>
+        <button class="btn" id="plan-new" title="New plan">New</button>
+        <button class="btn" id="plan-rename" title="Rename this plan">Rename</button>
+        <button class="btn" id="plan-delete" title="Delete this plan">Delete</button>
+        <span class="status" id="status" role="status" aria-live="polite"></span>
+      </div>
+      <button class="btn theme-btn" id="theme" aria-pressed="false"></button>
+    </header>
+
+    <section class="controls" aria-label="Plan controls">
+      <div class="stayctl" id="stayctl">
+        <label for="stay" id="stay-label"></label>
+        <input id="stay" type="range" step="1">
+        <output id="stay-out" for="stay"></output>
+      </div>
+      <div class="chips" id="filter" role="group" aria-label="Which costs to show">
+        <span class="lbl">Costs</span>
+        <button class="chip" data-f="all">All</button>
+        <button class="chip" data-f="stays">Stays</button>
+        <button class="chip" data-f="travel">Travel</button>
+        <button class="chip" data-f="none">Hide</button>
+      </div>
+      <button class="btn primary" id="add">+ Add bar</button>
+    </section>
+    <section class="summary" id="summary" aria-live="polite"></section>
+
+    <main>
+      <section class="card empty" id="empty" hidden>
+        <p>This plan is empty. Add a stay or a fixed window (like a visa) to start.</p>
+        <button class="btn primary" data-act="add">+ Add bar</button>
+        <button class="btn" data-act="sample">Use the sample plan</button>
+      </section>
+      <section class="timeline" id="timeline" aria-label="Timeline"></section>
+      <section class="compare" id="compare" aria-label="Cost by plan"></section>
+    </main>
+  </div>
+
+  <aside class="sheet" id="sheet" role="dialog" aria-labelledby="sh-t" hidden>
+    <div class="sh-head">
+      <div><div class="k" id="sh-k"></div><h3 id="sh-t"></h3></div>
+      <button class="sh-x" id="sh-x" aria-label="Close">×</button>
+    </div>
+    <div id="sh-b"></div>
+  </aside>
 </body>
 </html>
