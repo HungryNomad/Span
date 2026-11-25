@@ -1,5 +1,5 @@
 /**
- * Span Worker: JSON API under `/api/*`. Everything else is served from
+ * Span Worker: JSON API under `/api/*`, plus item pictures in R2. Everything else is served from
  * `public/` by the assets binding (see `wrangler.jsonc`), so this code only
  * runs for API requests.
  *
@@ -30,6 +30,12 @@ type Handler = (req: Request, env: Env, params: string[]) => Promise<Response>;
 
 /** Largest plan payload accepted, in bytes (D1 rows cap out around 2 MB). */
 const MAX_BODY = 512 * 1024;
+
+/** Largest stored picture and thumbnail, in bytes (the browser resizes first). */
+const MAX_FULL = 1.5 * 1024 * 1024, MAX_THUMB = 200 * 1024;
+
+/** Image ids are UUIDs; anything else is rejected before touching R2. */
+const IMAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
  * Builds a JSON response. API data is per-user and changes often, so it is
@@ -141,10 +147,123 @@ const updatePlan: Handler = async (req, env, [id]) => {
   return row ? json(toPlan(row)) : error(404, "plan not found");
 };
 
-/** `DELETE /api/plans/:id`: removes a plan. */
+/** `DELETE /api/plans/:id`: removes a plan and, best effort, its pictures. */
 const deletePlan: Handler = async (_req, env, [id]) => {
-  const { meta } = await env.DB.prepare("DELETE FROM plans WHERE id = ?").bind(id).run();
-  return meta.changes ? new Response(null, { status: 204 }) : error(404, "plan not found");
+  const row = await env.DB.prepare("DELETE FROM plans WHERE id = ? RETURNING body").bind(id).first<{ body: string }>();
+  if (!row) return error(404, "plan not found");
+  const ids = imagesIn(row.body);
+  if (env.IMAGES && ids.length) await env.IMAGES.delete(ids.flatMap(keys)).catch((err) => console.error(err));
+  return new Response(null, { status: 204 });
+};
+
+/**
+ * Image ids referenced by a stored plan body (`items[].images`).
+ *
+ * @param body - Plan document as JSON text.
+ * @returns Valid image ids, deduplicated.
+ */
+function imagesIn(body: string): string[] {
+  try {
+    const items: unknown = JSON.parse(body)?.items;
+    if (!Array.isArray(items)) return [];
+    const ids = items.flatMap((it) => (Array.isArray(it?.images) ? it.images : []));
+    return [...new Set(ids.filter((x): x is string => typeof x === "string" && IMAGE_ID.test(x)))];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * R2 keys for an image: the full picture and its thumbnail.
+ *
+ * @param id - Image id.
+ * @returns `[full, thumb]` keys.
+ */
+const keys = (id: string): [string, string] => [`img/${id}`, `img/${id}/t`];
+
+/**
+ * Sniffs a picture's type from its first bytes, so only real images are
+ * stored and served (never HTML or SVG under an image URL).
+ *
+ * @param bytes - File contents.
+ * @returns The MIME type, or null if it isn't WebP, JPEG or PNG.
+ */
+function imageType(bytes: Uint8Array): string | null {
+  const ascii = (a: number, b: number) => String.fromCharCode(...bytes.subarray(a, b));
+  if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "image/webp";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes[0] === 0x89 && ascii(1, 4) === "PNG") return "image/png";
+  return null;
+}
+
+/**
+ * Fails fast when the R2 binding isn't configured.
+ *
+ * @param env - Worker bindings.
+ * @returns The bucket, or a 503 `Response`.
+ */
+const bucket = (env: Env): R2Bucket | Response =>
+  env.IMAGES ?? error(503, "picture storage is not set up (R2 binding IMAGES)");
+
+/**
+ * Reads one uploaded file part and checks its size and type.
+ *
+ * @param form - Parsed multipart body.
+ * @param name - Field name.
+ * @param max - Size cap in bytes.
+ * @returns The bytes and sniffed type, or a 400/413 `Response`.
+ */
+async function readPart(form: FormData, name: string, max: number): Promise<{ bytes: Uint8Array; type: string } | Response> {
+  const file = form.get(name);
+  if (!(file instanceof File)) return error(400, `missing ${name} picture`);
+  if (file.size > max) return error(413, `${name} picture too large`);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const type = imageType(bytes);
+  return type ? { bytes, type } : error(400, `${name} is not a WebP, JPEG or PNG picture`);
+}
+
+/** `POST /api/images`: stores a resized picture and its thumbnail (multipart `full`, `thumb`). */
+const uploadImage: Handler = async (req, env) => {
+  const r2 = bucket(env);
+  if (r2 instanceof Response) return r2;
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_FULL + MAX_THUMB + 64 * 1024) return error(413, "upload too large");
+  const form = await req.formData().catch(() => null);
+  if (!form) return error(400, "expected multipart form data");
+  const full = await readPart(form, "full", MAX_FULL);
+  if (full instanceof Response) return full;
+  const thumb = await readPart(form, "thumb", MAX_THUMB);
+  if (thumb instanceof Response) return thumb;
+
+  const id = crypto.randomUUID(), [fk, tk] = keys(id);
+  await Promise.all([
+    r2.put(fk, full.bytes, { httpMetadata: { contentType: full.type } }),
+    r2.put(tk, thumb.bytes, { httpMetadata: { contentType: thumb.type } }),
+  ]);
+  return json({ id }, 201);
+};
+
+/** `GET /api/images/:id` and `/api/images/:id/thumb`: serves a stored picture. */
+const getImage: Handler = async (_req, env, [id, thumb]) => {
+  const r2 = bucket(env);
+  if (r2 instanceof Response) return r2;
+  const obj = await r2.get(keys(id)[thumb ? 1 : 0]);
+  if (!obj) return error(404, "picture not found");
+  return new Response(obj.body, {
+    headers: {
+      "content-type": obj.httpMetadata?.contentType ?? "application/octet-stream",
+      "cache-control": "private, max-age=31536000, immutable",
+      "x-content-type-options": "nosniff",
+      etag: obj.httpEtag,
+    },
+  });
+};
+
+/** `DELETE /api/images/:id`: removes a picture and its thumbnail. */
+const deleteImage: Handler = async (_req, env, [id]) => {
+  const r2 = bucket(env);
+  if (r2 instanceof Response) return r2;
+  await r2.delete(keys(id));
+  return new Response(null, { status: 204 });
 };
 
 /** Route table: method, path pattern (capture groups become params), handler. */
@@ -155,6 +274,9 @@ const routes: [method: string, pattern: RegExp, handler: Handler][] = [
   ["GET", /^\/api\/plans\/([\w-]+)$/, getPlan],
   ["PUT", /^\/api\/plans\/([\w-]+)$/, updatePlan],
   ["DELETE", /^\/api\/plans\/([\w-]+)$/, deletePlan],
+  ["POST", /^\/api\/images$/, uploadImage],
+  ["GET", /^\/api\/images\/([0-9a-f-]{36})(\/thumb)?$/, getImage],
+  ["DELETE", /^\/api\/images\/([0-9a-f-]{36})$/, deleteImage],
 ];
 
 export default {

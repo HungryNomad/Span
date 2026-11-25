@@ -1,26 +1,31 @@
 # Span
 
-A travel planner on a zoomable timeline (hours to years): visa windows, stays and trip options as bars, with stay and travel costs. Runs as a single Cloudflare Worker: static UI from `public/`, a JSON API in `src/worker.ts`, and plans stored in D1.
+A planner on a zoomable timeline (hours to years), for a long trip or a weekend: items nest inside items, either/or groups hold options, and costs add up as you go. Runs as a single Cloudflare Worker: static UI from `public/`, a JSON API in `src/worker.ts`, plans stored in D1 and pictures in R2.
 
 UI mockups live in [`docs/mockups.html`](docs/mockups.html) (open it locally in a browser). The app is the "Zoom timeline" direction with the "Compare plans" chart as its cost panel.
 
 ## Using it
 
-- **Bars:** a *fixed window* (visa, lease) never moves. A *stay* starts on a date, or right after another bar ("Starts after"), optionally arriving by a flight. Give a stay fewest/most nights to make it adjustable.
-- **Deciding how long to stay:** the first adjustable stay with options after it is the one you're deciding on. Drag the end of its bar, use the slider, or tap a day in the fare strip under the timeline.
-- **Fares:** tap a flight or a fare cell to enter the fare for that day; days without one use the route's usual fare. Routes are shared by every stay that uses them.
-- **Cost panel:** every way to continue after that stay, its total (stays + travel, or one of them), the cheapest day to leave, and a chart of totals by departure day.
-- Plans save automatically to D1. The first visit creates a sample plan (90-day Vietnam visa from Oct 20 2026, Bangkok/Taipei options, made-up prices).
+- **Items** hold items: a country holds rooms, a Saturday holds lunch and a gig. Each is measured in nights, days or hours, starts on a date, when its parent starts (plus some days), or right after another item. Leave the length empty to stretch it over what's inside. A *fixed window* (visa, lease) never moves.
+- **Either/or groups** hold options; only the top-ranked one counts. Drag an option up or down (long-press first on a phone) or use its Rank buttons. Outside groups, rank is just lane order.
+- **Committed or optional:** only committed items count toward totals, unless **Count optional** is on.
+- **Costs:** each item has cost lines that are fixed, per night/day/hour, or a fare by date on a shared route. Tick "each person" to multiply by the plan's **People**.
+- **Warnings:** inside an item, nights nothing covers are marked red and nights booked twice amber.
+- **Open what's inside:** on desktop, the chevron expands in place (about three levels on screen); on a phone, it drills in, with a breadcrumb back.
+- **Links and pictures:** paste a Booking, Agoda or Airbnb (or any) link onto an item and it shows as a site chip that opens in a new tab. Paste, drop or choose a picture; it's shrunk in the browser (1200 px WebP plus a thumbnail) and kept in R2.
+- **Deciding how long to stay:** the first adjustable item with something after it is the one you're deciding on. Drag the end of its bar, use the slider, or tap a day in the fare strip. The compare panel shows each option's total and a chart by departure day.
+- Plans save automatically to D1. Round-1 plans upgrade in the browser when opened (no migration). The first visit creates a sample plan (90-day Vietnam visa from Oct 20 2026, rooms in Vietnam, Bangkok/Taipei options, made-up prices).
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `wrangler.jsonc` | Worker config: assets (SPA fallback), custom domain, D1 binding `DB` |
+| `wrangler.jsonc` | Worker config: assets (SPA fallback), custom domain, D1 binding `DB`, R2 binding `IMAGES` (bucket `span-images`) |
 | `src/worker.ts` | API under `/api/*`; everything else is served from `public/` |
 | `migrations/` | D1 schema (`0001_plans.sql`: one JSON document per plan) |
 | `public/` | Static UI: `index.html`, `styles.css`, and plain ES modules in `app/` (no build step) |
-| `public/app/model.js` | Plan document shape, layout of chained bars, cost math, sample plan (pure, unit-tested) |
+| `public/app/model.js` | Plan document (v2) and v1 upgrade, layout of nested and chained items, counting, cost math, coverage, sample plan (pure, unit-tested) |
+| `public/app/images.js` | Resizes pictures in the browser before upload |
 | `test/` | `node --test` unit tests for the model |
 | `docs/mockups.html` | The UI directions (mockups) |
 
@@ -33,7 +38,10 @@ UI mockups live in [`docs/mockups.html`](docs/mockups.html) (open it locally in 
 | `POST /api/plans` | Create from `{ name, body? }`; `body` is any JSON object (512 KB max) |
 | `GET /api/plans/:id` | One plan with its body |
 | `PUT /api/plans/:id` | Update `name` and/or `body` |
-| `DELETE /api/plans/:id` | Delete |
+| `DELETE /api/plans/:id` | Delete, along with the plan's pictures |
+| `POST /api/images` | Store a picture: multipart `full` (≤1.5 MB) and `thumb` (≤200 KB), WebP, JPEG or PNG only; returns `{ id }` |
+| `GET /api/images/:id[/thumb]` | The picture or its thumbnail |
+| `DELETE /api/images/:id` | Delete a picture |
 
 ## Local development
 
@@ -59,7 +67,8 @@ deno task dev
 2. Create the database: `npx wrangler d1 create span`
 3. Paste the printed `database_id` into `wrangler.jsonc` (replacing the zeros).
 4. Set your subdomain: change `plan.example.com` in `wrangler.jsonc` to the real one. The domain's zone must be on the same Cloudflare account; Wrangler creates the DNS record and certificate.
-5. Deploy: `npm run deploy` (applies pending D1 migrations, then deploys the Worker).
+5. Create the picture bucket: `npx wrangler r2 bucket create span-images`
+6. Deploy: `npm run deploy` (applies pending D1 migrations, then deploys the Worker).
 
 ## Auto-deploy with Workers Builds
 

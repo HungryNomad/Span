@@ -1,86 +1,90 @@
 // @ts-check
 /**
- * The cost panel: every way to continue after the stay you're deciding on
- * (the pivot), with its total, the cheapest day to leave, and a chart of how
- * each total moves with your departure day.
+ * The cost panel: the options of the either/or group you're deciding on
+ * (the one after the pivot), each with its total, the cheapest day to
+ * leave, and a chart of how each total moves with your departure day.
+ * Picking an option ranks it first, so it becomes the one that counts.
  *
  * @module
  */
-import { fmt, money, pathCost, pathName, pathsFrom, pick, pivotOf, rangeOf, stayCost } from './model.js';
+import { focusGroupOf, fmt, insideName, kidsOf, layout, money, optionCost, pick, pivotOf, rangeOf, setRank, total } from './model.js';
 import { $, drag, esc, niceTicks } from './ui.js';
 
 /** @typedef {import('./ui.js').App} App */
-
-/** Line colors for multi-stop paths (single stops use their stay's color). */
-const MULTI = ['pink', 'purple', 'teal', 'gray'];
 
 /** Filter labels. */
 const TAG = { all: 'stays + travel', stays: 'stays only', travel: 'travel only', none: 'costs hidden' };
 
 export class Compare {
   /**
-   * Builds the panel inside `el` and wires the chart scrubber.
+   * Builds the panel inside `el` and wires the chart scrubber and buttons.
    * @param {HTMLElement} el Container.
    * @param {App} app
    */
   constructor(el, app) {
     this.app = app;
     this.el = el;
-    el.innerHTML = `<h2>Cost by plan</h2><p id="s-sub"></p><div class="s-list" id="s-list"></div>
+    el.innerHTML = `<h2 id="s-h">Compare options</h2><p id="s-sub"></p><div class="s-list" id="s-list"></div>
 <div class="s-chart card" id="s-card"><h3>Total by departure day</h3><p id="s-hint"></p><div class="plot" id="s-plot"></div></div>`;
     this.plot = $('#s-plot', el);
-    /** @type {{inv: (px: number) => number} | null} Maps chart x to pivot nights. */
+    /** @type {{inv: (px: number) => number} | null} Maps chart x to pivot length. */
     this.geo = null;
     const scrub = (/** @type {PointerEvent} */ e) => {
       const pivot = pivotOf(app.doc);
       if (!this.geo || !pivot) return;
-      app.setNights(pivot.id, Math.round(this.geo.inv(e.clientX - this.plot.getBoundingClientRect().left)));
+      app.setLen(pivot.id, Math.round(this.geo.inv(e.clientX - this.plot.getBoundingClientRect().left)));
     };
     this.plot.addEventListener('pointerdown', (e) => { scrub(e); drag(e, scrub); });
     el.addEventListener('click', (e) => {
-      const b = /** @type {HTMLElement} */ (e.target).closest('[data-nights]');
+      const b = /** @type {HTMLElement} */ (e.target).closest('button');
       const pivot = pivotOf(app.doc);
-      if (b instanceof HTMLElement && pivot) app.setNights(pivot.id, +(b.dataset.nights ?? 0));
+      if (b?.dataset.len && pivot) app.setLen(pivot.id, +b.dataset.len);
+      if (b?.dataset.pick) {
+        const id = b.dataset.pick;
+        app.change((doc) => setRank(doc, id, 0));
+      }
+      if (b?.dataset.sel) app.select(b.dataset.sel);
     });
   }
 
-  /** Redraws the plan rows and the chart for the current plan, pivot length and filter. */
+  /** Redraws the option rows and the chart for the current plan, pivot length and filter. */
   render() {
-    const { doc, filter } = this.app, pivot = pivotOf(doc);
-    const paths = pivot ? pathsFrom(doc, pivot.id) : [];
-    $('#s-card', this.el).hidden = !paths.length;
-    if (!pivot || !paths.length) {
-      $('#s-sub', this.el).textContent = 'Add stays that follow another stay (Add bar → "Starts after") to compare where to go next.';
+    const { doc, filter, optional } = this.app, pivot = pivotOf(doc), group = focusGroupOf(doc, pivot);
+    const opts = group ? kidsOf(doc, group.id) : [];
+    $('#s-card', this.el).hidden = !opts.length || !pivot;
+    if (!group || !opts.length) {
+      $('#s-h', this.el).textContent = 'Compare options';
+      $('#s-sub', this.el).textContent = 'Add an either/or group (Add → Either/or group) and put the options inside it to compare them here.';
       $('#s-list', this.el).innerHTML = '';
       return;
     }
-    const hide = filter === 'none', cur = doc.currency, [mn, mx] = rangeOf(pivot);
-    const colors = paths.map((path, j) => {
-      const s = path.length === 1 && doc.bars.find((b) => b.id === path[0]);
-      return s && s.kind === 'stay' ? s.color : MULTI[j % MULTI.length];
-    });
-    const series = paths.map((path) => {
+    const hide = filter === 'none', cur = doc.currency, at = layout(doc);
+    const [mn, mx] = pivot ? rangeOf(pivot) : [0, 0], len = pivot?.len ?? 0;
+    const colors = opts.map((o) => o.color);
+    const series = opts.map((o) => {
       const v = [];
-      for (let n = mn; n <= mx; n++) { const c = pathCost(doc, path, pivot.id, n); v.push({ ...c, total: pick(c.stay, c.travel, filter) }); }
+      for (let n = mn; n <= mx; n++) { const c = optionCost(doc, o.id, pivot?.id, n, optional); v.push({ ...c, total: pick(c, filter) }); }
       return v;
     });
-    const now = series.map((v) => v[pivot.nights - mn]);
+    const now = series.map((v) => v[len - mn]);
     const low = Math.min(...now.map((c) => c.total));
 
-    const ps = stayCost(pivot);
-    $('#s-sub', this.el).textContent = `What each option costs after ${pivot.name}, ${TAG[filter]}. ${pivot.name} itself: ${hide ? 'hidden' : money(pick(ps.total, 0, filter), cur)} for ${pivot.nights} nights.`;
-    $('#s-list', this.el).innerHTML = paths.map((path, j) => {
-      const c = now[j], best = series[j].reduce((a, b, n) => (b.total < a.t ? { n: mn + n, t: b.total } : a), { n: pivot.nights, t: c.total });
-      const isLow = !hide && c.total === low && paths.length > 1;
-      return `<article class="s-row card${isLow ? ' best' : ''}">
-  <div class="s-name"><span class="sw c-${colors[j]}"></span><h3>${esc(pathName(doc, path))}</h3>${isLow ? '<span class="pill">Lowest</span>' : ''}</div>
-  <div class="s-break">${hide ? '' : `Stays ${money(c.stay, cur)} · Travel ${money(c.travel, cur)} · `}${fmt(c.depart)} → ${fmt(c.end)}</div>
+    $('#s-h', this.el).textContent = `Compare: ${group.name}`;
+    const head = pivot ? (() => { const ps = total(doc, { optional, root: pivot.id, at }); return ` ${pivot.name} itself: ${hide ? 'hidden' : money(pick(ps, filter), cur)}.`; })() : '';
+    $('#s-sub', this.el).textContent = `What each option costs, ${TAG[filter]}${optional ? ', optional items included' : ''}. The top one is your pick and counts in totals.${head}`;
+    $('#s-list', this.el).innerHTML = opts.map((o, j) => {
+      const c = now[j], best = series[j].reduce((a, b, n) => (b.total < a.t ? { n: mn + n, t: b.total } : a), { n: len, t: c.total });
+      const isLow = !hide && c.total === low && opts.length > 1, inside = insideName(doc, o, at);
+      return `<article class="s-row card${isLow ? ' best' : ''}${j === 0 ? ' picked' : ''}">
+  <div class="s-name"><span class="sw c-${colors[j]}"></span><button class="s-open" data-sel="item:${esc(o.id)}"><h3>${esc(o.name)}</h3></button>${j === 0 ? '<span class="pill">Pick</span>' : ''}${isLow ? '<span class="pill low">Lowest</span>' : ''}</div>
+  <div class="s-break">${inside ? `${esc(inside)} · ` : ''}${hide ? '' : `Stays ${money(c.stay, cur)} · Travel ${money(c.travel, cur)} · `}${fmt(c.depart)} → ${fmt(c.end)}</div>
   <div class="s-total"><b>${hide ? '—' : money(c.total, cur)}</b><small>${TAG[filter]}</small></div>
-  ${!hide && best.n !== pivot.nights ? `<button class="s-apply" data-nights="${best.n}">Cheapest: leave ${fmt(c.depart - pivot.nights + best.n, { weekday: 'short' })} for ${money(best.t, cur)}, saves ${money(c.total - best.t, cur)}</button>` : ''}
+  <div class="s-acts">${j ? `<button class="s-apply" data-pick="${esc(o.id)}">Make this the pick</button>` : ''}${pivot && !hide && best.n !== len ? `<button class="s-apply" data-len="${best.n}">Cheapest: leave ${fmt(c.depart - len + best.n, { weekday: 'short' })} for ${money(best.t, cur)}, saves ${money(c.total - best.t, cur)}</button>` : ''}</div>
 </article>`;
     }).join('');
+    if (!pivot) return;
     $('#s-hint', this.el).textContent = hide ? 'Turn costs back on to compare totals.' : 'Tap or drag the chart to change your departure day.';
-    this.chart(series.map((v) => v.map((c) => c.total)), colors, paths.map((p) => pathName(doc, p)), mn, mx, pivot.nights, now[0].depart - pivot.nights, hide);
+    this.chart(series.map((v) => v.map((c) => c.total)), colors, opts.map((o) => o.name), mn, mx, len, now[0].depart - len, hide);
   }
 
   /**
