@@ -69,3 +69,35 @@ export const updatePlan = (id, patch, keepalive = false) =>
  * @returns {Promise<null>}
  */
 export const deletePlan = (id) => call('DELETE', `/plans/${encodeURIComponent(id)}`);
+
+/**
+ * URL of a stored picture.
+ * @param {string} id Image id (a UUID).
+ * @param {boolean} [thumb] The small version.
+ * @returns {string}
+ */
+export const imageUrl = (id, thumb = false) => `/api/images/${encodeURIComponent(id)}${thumb ? '/thumb' : ''}`;
+
+/**
+ * Uploads a picture (full size and thumbnail, already resized).
+ * @param {Blob} full
+ * @param {Blob} thumb
+ * @returns {Promise<{id: string}>}
+ * @throws {Error} With the server's message when the upload fails.
+ */
+export async function uploadImage(full, thumb) {
+  const form = new FormData();
+  form.append('full', full);
+  form.append('thumb', thumb);
+  const res = await fetch('/api/images', { method: 'POST', body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  return data;
+}
+
+/**
+ * Deletes a stored picture.
+ * @param {string} id
+ * @returns {Promise<null>}
+ */
+export const deleteImage = (id) => call('DELETE', `/images/${encodeURIComponent(id)}`);

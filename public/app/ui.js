@@ -12,10 +12,17 @@
  * @typedef {object} App
  * @property {import('./model.js').PlanDoc} doc Current plan document.
  * @property {import('./model.js').CostFilter} filter Which costs to show.
- * @property {string | null} sel Selected item: `bar:<id>`, `fare:<route>:<day>`, `add`, or `edit:<id>`.
+ * @property {boolean} optional Count optional items in totals.
+ * @property {string | null} sel Selected thing: `item:<id>`, `fare:<route>:<day>`, `add:<kind>:<parent>`, or `edit:<id>`.
+ * @property {Set<string>} open Items expanded in place (desktop).
+ * @property {string | null} drill Item the timeline is drilled into, or null for the whole plan.
+ * @property {boolean} narrow Phone-sized layout: children open by drilling in.
  * @property {(fn: (doc: import('./model.js').PlanDoc) => void) => void} change Mutates the plan, re-renders and schedules a save.
- * @property {(sel: string | null) => void} select Opens the sheet for an item, or closes it.
- * @property {(id: string, nights: number) => void} setNights Resizes a stay (clamped to its range).
+ * @property {(sel: string | null) => void} select Opens the sheet for something, or closes it.
+ * @property {(id: string, len: number) => void} setLen Resizes an item (clamped to its range).
+ * @property {(id: string) => void} toggle Expands or collapses an item in place.
+ * @property {(id: string | null) => void} drillTo Focuses the timeline on an item (null = whole plan).
+ * @property {(id: string, files: Iterable<Blob>) => Promise<void>} attach Adds pictures to an item.
  */
 
 /**

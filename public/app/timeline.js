@@ -1,18 +1,23 @@
 // @ts-check
 /**
  * The zoom timeline: a horizontal Gantt that zooms from hours to years.
- * Each lane is a row of bars (windows, stays, the flights between them);
- * under them, a fare strip shows what each possible departure day costs.
+ * Each row is one item; items holding others expand in place (desktop) or
+ * drill in (phone). Under the rows, a fare strip shows what each possible
+ * departure day costs.
  *
  * @module
  */
 import {
-  childrenOf, clamp, dateOf, fareOn, fmt, hhmm, isRanged, layout, money, nowIdx, pivotOf, rangeOf, routeLabel, stayCost,
+  ancestors, byId, clamp, counted, coverage, dateOf, departRoutes, fareOn, fmt, hhmm, inGroup, isRanged, kidsOf,
+  layout, money, nowIdx, pivotOf, rangeOf, routeLabel, setRank, total, unitText, UNIT_DAYS,
 } from './model.js';
 import { $, drag, esc, heat, PLANE } from './ui.js';
 
 /** @typedef {import('./ui.js').App} App */
-/** @typedef {import('./model.js').StayBar} StayBar */
+/** @typedef {import('./model.js').Item} Item */
+/** @typedef {import('./model.js').Placed} Placed */
+/** @typedef {import('./model.js').PlanDoc} PlanDoc */
+/** @typedef {{item: Item, depth: number}} Row */
 
 const WD = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -25,6 +30,10 @@ const SPAN = { h: 1 / 24, d: 1, w: 7, m: 30.44, y: 365.25 };
 const AXIS = 48, ROW = 44, FARE = 24;
 /** Most zoomed in: 96 px per hour. */
 const PPD_MAX = 24 * 96;
+/** Deepest level that expands in place on desktop (0-based); deeper items drill in. */
+const MAX_OPEN_DEPTH = 1;
+/** Long-press before a touch drag moves a bar, in ms. */
+const HOLD_MS = 350;
 /** Zoom presets: visible span in days. */
 const PRESETS = { Hours: 1, Days: 9, Weeks: 42, Months: 124, Year: 365 };
 
@@ -85,16 +94,84 @@ function axisTicks(a, b, ppd) {
   return { k, n, minor, major };
 }
 
+
 /**
- * Earliest departure hour among routes leaving after a stay, used to end
- * the stay's bar a little before its flight.
- * @param {import('./model.js').PlanDoc} doc
+ * Rows the timeline shows, in order: the whole plan's top level (or the
+ * drilled-in item) plus whatever is open beneath.
+ * @param {App} app
+ * @returns {Row[]}
+ */
+export function visibleRows(app) {
+  const { doc, drill } = app, root = byId(doc, drill ?? undefined);
+  /** @type {Row[]} */
+  const out = [];
+  /** @param {Item} it @param {number} depth */
+  const walk = (it, depth) => {
+    out.push({ item: it, depth });
+    if (isOpen(app, it, depth, !!root)) kidsOf(doc, it.id).forEach((k) => walk(k, depth + 1));
+  };
+  (root ? [root] : kidsOf(doc, undefined)).forEach((it) => walk(it, 0));
+  return out;
+}
+
+/**
+ * Whether an item's children show as rows under it.
+ * @param {App} app
+ * @param {Item} it
+ * @param {number} depth Row depth (0 = top of the current view).
+ * @param {boolean} drilled Whether the view is drilled into an item.
+ * @returns {boolean}
+ */
+function isOpen(app, it, depth, drilled) {
+  if (depth === 0 && drilled) return true;
+  if (app.narrow) return depth === 0 && it.kind === 'group';
+  return depth <= MAX_OPEN_DEPTH && app.open.has(it.id);
+}
+
+/**
+ * What tapping an item's chevron does here: expand in place, or drill in.
+ * @param {App} app
+ * @param {number} depth
+ * @returns {'toggle' | 'drill'}
+ */
+const chevronAction = (app, depth) => (!app.narrow && depth <= MAX_OPEN_DEPTH ? 'toggle' : 'drill');
+
+/**
+ * Earliest departure hour among routes leaving after an item, used to end
+ * the item's bar a little before its flight.
+ * @param {PlanDoc} doc
  * @param {string} id
  * @returns {number | undefined}
  */
 function firstDeparture(doc, id) {
-  const hours = childrenOf(doc, id).flatMap((k) => (k.route && doc.routes[k.route] ? [doc.routes[k.route].depart] : []));
+  const hours = departRoutes(doc, id).map((k) => doc.routes[k].depart);
   return hours.length ? Math.min(...hours) : undefined;
+}
+
+/**
+ * The route an item arrives by: its first fare-priced cost.
+ * @param {PlanDoc} doc
+ * @param {Item} it
+ * @returns {[string, import('./model.js').Route] | undefined}
+ */
+function arrival(doc, it) {
+  const c = it.costs.find((l) => l.type === 'date' && l.route && doc.routes[l.route]);
+  return c?.route ? [c.route, doc.routes[c.route]] : undefined;
+}
+
+/**
+ * Where an item's bar starts and ends on screen, in fractional days. Nights
+ * run from check-in (or the flight's arrival) to check-out (a little before
+ * the next flight); days and hours are drawn exactly.
+ * @param {PlanDoc} doc
+ * @param {Placed} p
+ * @returns {[number, number]}
+ */
+function barSpan(doc, p) {
+  const it = p.item;
+  if (it.unit !== 'night' || it.kind !== 'item') return [p.start, p.show];
+  const r = arrival(doc, it)?.[1];
+  return [p.start + (r ? r.depart + r.hours : 14) / 24, p.end + ((firstDeparture(doc, it.id) ?? 12) - 2) / 24];
 }
 
 export class Timeline {
@@ -113,17 +190,22 @@ export class Timeline {
     this.d1 = 1;
     /** Set briefly after a drag so the trailing click doesn't select. */
     this.justDragged = false;
+    /** True while a bar is being dragged by touch, so the page doesn't scroll. */
+    this.touchDrag = false;
+    /** Rows from the last render. */
+    this.rows = /** @type {Row[]} */ ([]);
     el.innerHTML = `
 <div class="tools">
   <div class="seg" id="g-pre" role="group" aria-label="Zoom presets">${Object.keys(PRESETS).map((p) => `<button data-p="${p}">${p}</button>`).join('')}</div>
   <label class="zoom"><span class="mono" aria-hidden="true">−</span><input id="g-zoom" type="range" min="0" max="1000" aria-label="Zoom level"><span class="mono" aria-hidden="true">+</span></label>
-  <span class="hint">Pinch or Ctrl+scroll to zoom. Drag a bar's end to change its length. Tap a fare to leave that day.</span>
+  <span class="hint" id="g-hint"></span>
 </div>
+<nav class="crumbs" id="g-crumbs" aria-label="Where you are" hidden></nav>
 <div class="g-frame">
   <div class="g-labels" id="g-labels"></div>
   <div class="g-scroll" id="g-scroll"><div class="g-inner" id="g-inner">
     <div class="g-axis" id="g-axis"></div>
-    <div class="g-rows"><div class="g-grid" id="g-grid"></div><div class="g-bars" id="g-bars"></div></div>
+    <div class="g-rows" id="g-rows"><div class="g-grid" id="g-grid"></div><div class="g-bars" id="g-bars"></div></div>
   </div></div>
 </div>`;
     this.sc = $('#g-scroll', el);
@@ -132,10 +214,9 @@ export class Timeline {
     this.grid = $('#g-grid', el);
     this.bars = $('#g-bars', el);
     this.labels = $('#g-labels', el);
+    this.crumbs = $('#g-crumbs', el);
     this.zoom = /** @type {HTMLInputElement} */ ($('#g-zoom', el));
     this.pre = $('#g-pre', el);
-    /** Lane count from the last render, for gridlines. */
-    this.laneCount = 0;
     /** When true, the next render with a measurable width jumps to the Months preset. */
     this.fresh = true;
     /** Preset picked last, until you zoom by hand. */
@@ -170,35 +251,126 @@ export class Timeline {
       }
     }, { passive: true });
     this.sc.addEventListener('touchmove', (e) => {
-      if (pinch && e.touches.length === 2) { e.preventDefault(); this.zoomTo(pinch.p * dist(e.touches) / pinch.d, pinch.cx); }
+      if (this.touchDrag) e.preventDefault();
+      else if (pinch && e.touches.length === 2) { e.preventDefault(); this.zoomTo(pinch.p * dist(e.touches) / pinch.d, pinch.cx); }
     }, { passive: false });
     this.sc.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; });
+    this.bars.addEventListener('contextmenu', (e) => { if (/** @type {HTMLElement} */ (e.target).closest('.bar')) e.preventDefault(); });
 
     this.bars.addEventListener('pointerdown', (e) => {
-      const h = /** @type {HTMLElement} */ (e.target).closest('.handle');
-      if (!(h instanceof HTMLElement)) return;
-      const id = /** @type {string} */ (h.dataset.id), start = +(h.dataset.start ?? 0), frac = +(h.dataset.frac ?? 0);
-      drag(e, (ev) => {
-        const day = (ev.clientX - this.sc.getBoundingClientRect().left + this.sc.scrollLeft) / this.ppd + this.d0;
-        this.app.setNights(id, Math.round(day - frac - start));
-      }, () => { this.justDragged = true; setTimeout(() => { this.justDragged = false; }, 60); });
+      const t = /** @type {HTMLElement} */ (e.target);
+      const h = t.closest('.handle');
+      if (h instanceof HTMLElement) return this.resize(e, h);
+      const b = t.closest('.bar[data-id]');
+      if (b instanceof HTMLElement && e.button === 0) this.grab(e, b);
     });
     this.bars.addEventListener('click', (e) => {
       const t = /** @type {HTMLElement} */ (e.target).closest('[data-sel]');
       if (!(t instanceof HTMLElement) || this.justDragged) return;
-      if (t.dataset.pivot) this.app.setNights(t.dataset.pivot, +(t.dataset.nights ?? 0));
+      if (t.dataset.pivot) this.app.setLen(t.dataset.pivot, +(t.dataset.len ?? 0));
       this.app.select(/** @type {string} */ (t.dataset.sel));
+    });
+    this.labels.addEventListener('click', (e) => {
+      const t = /** @type {HTMLElement} */ (e.target).closest('button');
+      if (!t) return;
+      if (t.dataset.tw) (t.dataset.act === 'toggle' ? this.app.toggle : this.app.drillTo)(t.dataset.tw);
+      else if (t.dataset.sel) this.app.select(t.dataset.sel);
+    });
+    this.crumbs.addEventListener('click', (e) => {
+      const t = /** @type {HTMLElement} */ (e.target).closest('button');
+      if (t) this.app.drillTo(t.dataset.drill || null);
     });
     el.addEventListener('keydown', (e) => {
       const t = /** @type {HTMLElement} */ (e.target);
       if (t.classList.contains('handle')) {
         const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
-        const s = /** @type {StayBar | undefined} */ (this.app.doc.bars.find((b) => b.id === t.dataset.id));
-        if (step && s) { e.preventDefault(); this.app.setNights(s.id, s.nights + step); }
+        const it = byId(this.app.doc, t.dataset.id);
+        if (step && it?.len !== undefined) { e.preventDefault(); this.app.setLen(it.id, it.len + step * (it.unit === 'hour' ? 0.25 : 1)); }
       } else if (t === this.sc && (e.key === '+' || e.key === '-' || e.key === '=')) {
         this.zoomTo(this.ppd * (e.key === '-' ? 0.7 : 1.4));
       }
     });
+  }
+
+  /**
+   * Fractional day under a pointer.
+   * @param {PointerEvent} ev
+   * @returns {number}
+   */
+  dayAt(ev) { return (ev.clientX - this.sc.getBoundingClientRect().left + this.sc.scrollLeft) / this.ppd + this.d0; }
+
+  /** Marks a drag as just finished, so its trailing click doesn't select. */
+  dropped() {
+    this.justDragged = true;
+    this.touchDrag = false;
+    setTimeout(() => { this.justDragged = false; }, 60);
+  }
+
+  /**
+   * Drags a bar's end handle to change its length.
+   * @param {PointerEvent} e
+   * @param {HTMLElement} h
+   */
+  resize(e, h) {
+    const id = /** @type {string} */ (h.dataset.id), start = +(h.dataset.start ?? 0), frac = +(h.dataset.frac ?? 0);
+    const it = byId(this.app.doc, id);
+    if (!it) return;
+    const per = UNIT_DAYS[it.unit], snap = it.unit === 'hour' ? 4 : 1;
+    this.touchDrag = e.pointerType === 'touch';
+    drag(e, (ev) => this.app.setLen(id, Math.round((this.dayAt(ev) - frac - start) / per * snap) / snap), () => this.dropped());
+  }
+
+  /**
+   * Drags a bar: sideways moves it in time, up or down changes its rank
+   * among its siblings. On touch, the bar needs a long press first so the
+   * timeline still scrolls under a quick swipe.
+   * @param {PointerEvent} e
+   * @param {HTMLElement} b The bar.
+   */
+  grab(e, b) {
+    const app = this.app, id = /** @type {string} */ (b.dataset.id), it = byId(app.doc, id);
+    if (!it) return;
+    const x0 = e.clientX, y0 = e.clientY, orig = it.offset, touch = e.pointerType === 'touch';
+    const sibRows = this.rows.flatMap((r, i) => (r.item.parent === it.parent ? [{ i, item: r.item }] : []));
+    const rowsTop = () => this.inner.getBoundingClientRect().top + AXIS;
+    let armed = !touch, mode = /** @type {'move' | 'rank' | null} */ (null), target = -1;
+    if (!touch) e.preventDefault();
+    const timer = touch ? setTimeout(() => { armed = true; this.touchDrag = true; b.classList.add('lift'); navigator.vibrate?.(8); }, HOLD_MS) : 0;
+    const move = (/** @type {PointerEvent} */ ev) => {
+      const dx = ev.clientX - x0, dy = ev.clientY - y0;
+      if (!armed) { if (Math.hypot(dx, dy) > 8) end(); return; }
+      if (!mode) {
+        if (Math.hypot(dx, dy) < 6) return;
+        mode = Math.abs(dy) > Math.abs(dx) && sibRows.length > 1 ? 'rank' : 'move';
+      }
+      if (mode === 'move') {
+        const days = dx / this.ppd, step = it.unit === 'hour' ? 96 : 1;
+        const next = orig + Math.round(days * step) / step;
+        app.change((doc) => { const cur = byId(doc, id); if (cur) cur.offset = next; });
+        return;
+      }
+      b.style.transform = `translateY(${dy}px)`;
+      const row = (ev.clientY - rowsTop()) / ROW - 0.5;
+      const best = sibRows.reduce((a, s) => (Math.abs(s.i - row) < Math.abs(a.i - row) ? s : a), sibRows[0]);
+      target = kidsOf(app.doc, it.parent).indexOf(best.item);
+      this.bars.querySelector('.rank-mark')?.remove();
+      this.bars.insertAdjacentHTML('beforeend', `<div class="rank-mark" style="top:${best.i * ROW + 2}px"></div>`);
+    };
+    const end = () => {
+      clearTimeout(timer);
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', end);
+      removeEventListener('pointercancel', end);
+      b.classList.remove('lift');
+      b.style.transform = '';
+      this.bars.querySelector('.rank-mark')?.remove();
+      if (mode === 'rank' && target >= 0) app.change((doc) => setRank(doc, id, target));
+      if (mode) this.dropped();
+      else this.touchDrag = false;
+    };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', end);
+    addEventListener('pointercancel', end);
   }
 
   /** @returns {number} Visible width of the scroller. */
@@ -240,16 +412,14 @@ export class Timeline {
 
   /**
    * Jumps to a preset span, centred on what matters at that scale: the
-   * departure day for short spans, the whole plan for long ones.
+   * departure day for short spans, everything in view for long ones.
    * @param {keyof typeof PRESETS} name
    */
   preset(name) {
-    const { doc } = this.app, at = layout(doc), placed = [...at.values()];
+    const { doc } = this.app, at = layout(doc), shown = this.viewPlaced(at);
     const pivot = pivotOf(doc), today = nowIdx();
-    const focus = pivot ? /** @type {import('./model.js').Placed} */ (at.get(pivot.id)).end : today;
-    const mid = placed.length
-      ? (Math.min(...placed.map((p) => p.start)) + Math.max(...placed.map((p) => p.end))) / 2
-      : today;
+    const focus = pivot && !this.app.drill ? /** @type {Placed} */ (at.get(pivot.id)).end : shown.length ? shown[0].start : today;
+    const mid = shown.length ? (Math.min(...shown.map((p) => p.start)) + Math.max(...shown.map((p) => p.show))) / 2 : today;
     const center = { Hours: focus + 0.45, Days: focus + 2, Weeks: focus, Months: mid, Year: mid }[name];
     this.fresh = false;
     this.active = name;
@@ -264,14 +434,24 @@ export class Timeline {
   reset() { this.fresh = true; }
 
   /**
-   * Sets the drawn range: from the month before the first bar (or today) to
-   * well past the last.
+   * Placed items in the current view (all, or the drilled-in item's subtree).
+   * @param {import('./model.js').Layout} at
+   * @returns {Placed[]}
+   */
+  viewPlaced(at) {
+    const rows = visibleRows(this.app);
+    return rows.map((r) => /** @type {Placed} */ (at.get(r.item.id)));
+  }
+
+  /**
+   * Sets the drawn range: from the month before the first item (or today)
+   * to well past the last.
    * @returns {number} Pixels the content moved right, to keep the view steady.
    */
   updateRange() {
     const placed = [...layout(this.app.doc).values()], today = nowIdx();
     const lo = placed.length ? Math.min(...placed.map((p) => p.start)) : today;
-    const hi = placed.length ? Math.max(...placed.map((p) => p.end), lo + 1) : today;
+    const hi = placed.length ? Math.max(...placed.map((p) => p.show), lo + 1) : today;
     const first = dateOf(Math.min(lo, today) - 14);
     const d0 = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), 1) / 864e5;
     const shift = this.ppd ? (this.d0 - d0) * this.ppd : 0;
@@ -280,30 +460,49 @@ export class Timeline {
     return shift;
   }
 
-  /** Redraws lanes, bars, flights and the fare strip for the current plan and zoom. */
+  /** Redraws rows, bars, flights, coverage marks and the fare strip. */
   render() {
-    if (this.fresh && this.app.doc.bars.length && this.sc.clientWidth) return this.preset('Months');
-    const { doc, filter, sel } = this.app;
-    const at = layout(doc), today = nowIdx();
+    if (this.fresh && this.app.doc.items.length && this.sc.clientWidth) return this.preset('Months');
+    const { doc, filter, sel, optional, drill } = this.app;
+    const at = layout(doc), today = nowIdx(), cov = coverage(doc, at, optional), live = counted(doc, optional);
     const showStay = filter === 'all' || filter === 'stays', showTravel = filter === 'all' || filter === 'travel';
     const shift = this.updateRange();
     this.ppd = this.ppd ? clamp(this.ppd, this.ppdMin(), PPD_MAX) : this.ppdMin();
     const p = this.ppd, x = (/** @type {number} */ i) => this.x(i);
 
-    const lanes = [...new Set(doc.bars.map((b) => b.lane))];
-    const pivot = pivotOf(doc), pp = pivot && at.get(pivot.id);
-    const fareRoutes = pivot ? [...new Set(childrenOf(doc, pivot.id).flatMap((k) => (k.route ? [k.route] : [])))] : [];
-    const height = AXIS + lanes.length * ROW + (fareRoutes.length ? fareRoutes.length * FARE + 12 : 0);
-    this.laneCount = lanes.length;
+    const rows = this.rows = visibleRows(this.app);
+    const pivot = drill ? undefined : pivotOf(doc), pp = pivot && at.get(pivot.id);
+    const fareRoutes = pivot ? departRoutes(doc, pivot.id) : [];
+    const height = AXIS + rows.length * ROW + (fareRoutes.length ? fareRoutes.length * FARE + 12 : 0);
     this.inner.style.width = `${(this.d1 - this.d0) * p}px`;
     this.inner.style.height = `${height}px`;
     this.zoom.value = String(this.toSlider(p));
+    $('#g-hint').textContent = this.app.narrow
+      ? 'Pinch to zoom. Hold a bar, then drag it. Tap › to open what an item holds.'
+      : 'Ctrl+scroll to zoom. Drag a bar to move it, up or down to rank it, or its end to resize.';
 
-    // Lane labels.
-    this.labels.innerHTML = `<div class="g-lab"><small id="g-scale"></small></div>` + lanes.map((lane) => {
-      const b = /** @type {import('./model.js').Bar} */ (doc.bars.find((x) => x.lane === lane));
-      const sub = b.kind === 'window' ? 'fixed' : isRanged(b) ? `${b.minNights}–${b.maxNights} nights` : b.after ? 'option' : `${b.nights} nights`;
-      return `<div class="g-lab"><span>${esc(lane)}</span><small>${sub}</small></div>`;
+    // Breadcrumb when drilled in.
+    const root = byId(doc, drill ?? undefined);
+    this.crumbs.hidden = !root;
+    if (root) {
+      const trail = [...ancestors(doc, root)].reverse();
+      this.crumbs.innerHTML = `<button data-drill="">Whole plan</button>` +
+        trail.map((a) => `<span aria-hidden="true">›</span><button data-drill="${esc(a.id)}">${esc(a.name)}</button>`).join('') +
+        `<span aria-hidden="true">›</span><b>${esc(root.name)}</b>`;
+    }
+
+    // Row labels.
+    this.labels.innerHTML = `<div class="g-lab"><small id="g-scale"></small></div>` + rows.map(({ item: it, depth }) => {
+      const kids = kidsOf(doc, it.id), alt = inGroup(doc, it) ? kidsOf(doc, it.parent).indexOf(it) : -1;
+      const sub = it.kind === 'window' ? 'fixed' : it.kind === 'group' ? `either/or · ${kids.length}`
+        : alt > 0 ? `option ${alt + 1}` : alt === 0 ? 'pick'
+        : !it.committed ? 'optional' : isRanged(it) ? `${it.minLen}–${unitText(it.maxLen, it.unit)}`
+        : it.len === undefined && kids.length ? `${kids.length} inside` : unitText(it.len ?? 1, it.unit);
+      const open = kids.length && isOpen(this.app, it, depth, !!root);
+      const act = chevronAction(this.app, depth);
+      const tw = !kids.length || (depth === 0 && root) ? '<span class="tw-sp"></span>'
+        : `<button class="tw${act === 'drill' ? ' drill' : ''}" data-tw="${esc(it.id)}" data-act="${act}" aria-expanded="${act === 'toggle' ? !!open : 'false'}" aria-label="${act === 'toggle' ? (open ? 'Collapse' : 'Expand') : 'Open'} ${esc(it.name)}">${act === 'toggle' ? (open ? '▾' : '▸') : '›'}</button>`;
+      return `<div class="g-lab" style="--d:${depth}">${tw}<button class="lab-n" data-sel="item:${esc(it.id)}"><span>${esc(it.name)}</span><small>${sub}</small></button></div>`;
     }).join('') + fareRoutes.map((k, n) => `<div class="g-lab fare"${n ? '' : ' style="margin-top:8px"'}>${esc(doc.routes[k].to)} fares</div>`).join('');
 
     let h = '';
@@ -315,34 +514,50 @@ export class Timeline {
      * @param {number} w Width px.
      * @param {number} top Top px.
      * @param {string} text Label (already escaped).
+     * @param {string} [attrs] Extra attributes.
      */
-    const bar = (id, cls, l, w, top, text) =>
-      `<button class="bar ${cls}${w < 72 ? ' tight' : ''}${sel === id ? ' sel' : ''}" data-sel="${esc(id)}" style="left:${l}px;width:${Math.max(w, 2)}px;top:${top}px" title="${text}"><span>${text}</span></button>`;
+    const bar = (id, cls, l, w, top, text, attrs = '') =>
+      `<button class="bar ${cls}${w < 72 ? ' tight' : ''}${sel === id ? ' sel' : ''}" data-sel="${esc(id)}" ${attrs} style="left:${l}px;width:${Math.max(w, 2)}px;top:${top}px" title="${text}"><span>${text}</span></button>`;
 
-    for (const b of doc.bars) {
-      const pl = /** @type {import('./model.js').Placed} */ (at.get(b.id)), top = lanes.indexOf(b.lane) * ROW + 6;
-      if (b.kind === 'window') {
-        const l = x(pl.start), r = x(pl.end);
-        h += bar(`bar:${b.id}`, 'window', l, r - l, top, esc(`${b.name} · ${b.days} days · ${fmt(pl.start)} – ${fmt(pl.end - 1)}`));
-        h += `<div class="dl" style="left:${r}px"></div><span class="dlab" style="left:${r + 6}px;top:${top + 8}px">Leave by ${fmt(pl.end - 1)}</span>`;
-        continue;
+    rows.forEach(({ item: it }, r) => {
+      const pl = /** @type {Placed} */ (at.get(it.id)), top = r * ROW + 6, data = `data-id="${esc(it.id)}"`;
+      if (it.kind === 'window') {
+        const l = x(pl.start), rr = x(pl.end);
+        h += bar(`item:${it.id}`, 'window', l, rr - l, top, esc(`${it.name} · ${unitText(it.len ?? 1, 'day')} · ${fmt(pl.start)} – ${fmt(pl.end - 1)}`), data);
+        h += `<div class="dl" style="left:${rr}px"></div><span class="dlab" style="left:${rr + 6}px;top:${top + 8}px">Leave by ${fmt(pl.end - 1)}</span>`;
+        return;
       }
-      const route = b.route ? doc.routes[b.route] : undefined;
-      const s0 = pl.start + (route ? (route.depart + route.hours) / 24 : 0);
-      const frac = ((firstDeparture(doc, b.id) ?? 14) - 2) / 24, s1 = pl.end + frac;
-      if (isRanged(b)) {
-        h += `<div class="track c-${b.color}" style="left:${x(pl.start + b.minNights + frac)}px;width:${(b.maxNights - b.minNights) * p}px;top:${top}px"></div>`;
+      if (it.kind === 'group') {
+        const winner = kidsOf(doc, it.id)[0];
+        h += bar(`item:${it.id}`, 'grp', x(pl.start), x(pl.show) - x(pl.start), top, esc(`Either/or · ${it.name}${winner ? ` · pick: ${winner.name}` : ''}`), data);
+        return;
       }
-      const cost = showStay ? ` · ${money(stayCost(b).total, doc.currency)}` : '';
-      h += bar(`bar:${b.id}`, `c-${b.color}`, x(s0), x(s1) - x(s0), top, esc(`${b.name} · ${b.nights} night${b.nights === 1 ? '' : 's'}`) + cost);
-      if (x(s1) - x(s0) > 28) {
-        const [mn, mx] = isRanged(b) ? [b.minNights, b.maxNights] : [1, 999];
-        h += `<div class="handle" data-id="${esc(b.id)}" data-start="${pl.start}" data-frac="${frac}" style="left:${x(s1) - 16}px;top:${top}px" role="slider" tabindex="0" aria-label="Length of ${esc(b.name)}" aria-valuemin="${mn}" aria-valuemax="${mx}" aria-valuenow="${b.nights}" aria-valuetext="${b.nights} nights, leave ${fmt(pl.end)}"></div>`;
+      const [s0, s1] = barSpan(doc, pl), alt = inGroup(doc, it) ? kidsOf(doc, it.parent).indexOf(it) : -1;
+      if (isRanged(it)) {
+        const frac = s1 - pl.end, per = UNIT_DAYS[it.unit];
+        h += `<div class="track c-${it.color}" style="left:${x(pl.start + it.minLen * per + frac)}px;width:${(it.maxLen - it.minLen) * per * p}px;top:${top}px"></div>`;
       }
-      if (route) {
-        const f0 = x(pl.start + route.depart / 24), fw = Math.max(4, route.hours / 24 * p), fare = fareOn(route, pl.start);
-        const id = `fare:${b.route}:${pl.start}`;
-        const price = showTravel ? money(fare, doc.currency) : '';
+      const sum = total(doc, { optional, root: it.id, at });
+      const cost = showStay && sum.stay ? ` · ${money(sum.stay, doc.currency)}` : '';
+      const cls = `c-${it.color}${alt > 0 ? ' alt' : ''}${alt < 0 && !it.committed ? ' opt' : ''}${live.has(it.id) ? '' : ' out'}`;
+      const len = it.len === undefined && kidsOf(doc, it.id).length ? '' : ` · ${unitText(it.len ?? 1, it.unit)}`;
+      const time = it.unit === 'hour' ? ` · ${hhmm((pl.start % 1) * 24)}` : '';
+      h += bar(`item:${it.id}`, cls, x(s0), x(s1) - x(s0), top, (alt > 0 ? `#${alt + 1} ` : '') + esc(`${it.name}${time}${len}`) + cost, data);
+      if (it.len !== undefined && x(s1) - x(s0) > 28) {
+        const [mn, mx] = isRanged(it) ? [it.minLen, it.maxLen] : [it.unit === 'hour' ? 0.25 : 1, 9999];
+        h += `<div class="handle" data-id="${esc(it.id)}" data-start="${pl.start}" data-frac="${s1 - pl.end}" style="left:${x(s1) - 16}px;top:${top}px" role="slider" tabindex="0" aria-label="Length of ${esc(it.name)}" aria-valuemin="${mn}" aria-valuemax="${mx}" aria-valuenow="${it.len}" aria-valuetext="${unitText(it.len, it.unit)}, ends ${fmt(pl.end)}"></div>`;
+      }
+      const c = cov.get(it.id);
+      if (c) {
+        const mark = (/** @type {[number, number]} */ [a, b], /** @type {string} */ kind, /** @type {string} */ what) =>
+          `<i class="cov ${kind}" style="left:${x(a)}px;width:${Math.max(3, (b - a) * p)}px;top:${top + 33}px" title="${what} ${fmt(a)} – ${fmt(b)}"></i>`;
+        h += c.gaps.map((g) => mark(g, 'gap', `Nothing booked`)).join('') + c.overlaps.map((o) => mark(o, 'ovl', 'Overlap')).join('');
+      }
+      const arr = arrival(doc, it);
+      if (arr) {
+        const [key, route] = arr, f0 = x(Math.floor(pl.start) + route.depart / 24), fw = Math.max(4, route.hours / 24 * p);
+        const fare = fareOn(route, pl.start), id = `fare:${key}:${Math.floor(pl.start)}`;
+        const price = showTravel ? money(fare * (it.costs.find((l) => l.route === key)?.pp ? doc.people : 1), doc.currency) : '';
         if (fw > 170) {
           h += `<button class="bar fl wide${sel === id ? ' sel' : ''}" data-sel="${esc(id)}" style="left:${f0}px;width:${fw}px;top:${top + 5}px"><span>${esc(routeLabel(route))} ${hhmm(route.depart)}–${hhmm(route.depart + route.hours)}${price && ' · ' + price}</span></button>`;
         } else {
@@ -350,18 +565,18 @@ export class Timeline {
           h += `<button class="ftag" data-sel="${esc(id)}" style="left:${f0 - 4}px;top:${top + 6}px">${PLANE}${price}</button>`;
         }
       }
-    }
+    });
 
     // Fare strip: one row per route leaving the pivot, one cell per possible departure day.
     if (pivot && pp) {
-      const [mn, mx] = rangeOf(pivot), base = lanes.length * ROW + 10;
+      const [mn, mx] = rangeOf(pivot), base = rows.length * ROW + 10;
       fareRoutes.forEach((k, n) => {
         const r = doc.routes[k], top = base + n * FARE, vals = [];
         for (let i = mn; i <= mx; i++) vals.push(fareOn(r, pp.start + i));
         const flo = Math.min(...vals), fhi = Math.max(...vals);
         vals.forEach((v, j) => {
           const day = pp.start + mn + j, c = heat(v, flo, fhi);
-          h += `<button class="fc${c.cls}${day === pp.end ? ' on' : ''}${showTravel ? '' : ' off'}" data-sel="fare:${esc(k)}:${day}" data-pivot="${esc(pivot.id)}" data-nights="${mn + j}" style="left:${x(day)}px;width:${p}px;top:${top}px;${c.style}" aria-label="${esc(routeLabel(r))} ${fmt(day)} ${money(v, doc.currency)}">${showTravel && p >= 36 ? money(v, doc.currency) : ''}</button>`;
+          h += `<button class="fc${c.cls}${day === pp.end ? ' on' : ''}${showTravel ? '' : ' off'}" data-sel="fare:${esc(k)}:${day}" data-pivot="${esc(pivot.id)}" data-len="${mn + j}" style="left:${x(day)}px;width:${p}px;top:${top}px;${c.style}" aria-label="${esc(routeLabel(r))} ${fmt(day)} ${money(v, doc.currency)}">${showTravel && p >= 36 ? money(v, doc.currency) : ''}</button>`;
         });
       });
     }
@@ -395,7 +610,7 @@ export class Timeline {
       gr += `<i class="gl m" style="left:${X}px"></i>`;
     });
     ax += `<span class="todaytag" style="left:${this.x(nowIdx())}px">Today</span>`;
-    for (let r = 1; r <= this.laneCount; r++) gr += `<i class="hl" style="top:${r * ROW}px"></i>`;
+    for (let r = 1; r <= this.rows.length; r++) gr += `<i class="hl" style="top:${r * ROW}px"></i>`;
     this.axis.innerHTML = ax;
     this.grid.innerHTML = gr;
     const name = { h: 'Hours', d: 'Days', w: 'Weeks', m: n === 3 ? 'Quarters' : 'Months', y: 'Years' }[k] ?? '';

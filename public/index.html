@@ -42,15 +42,17 @@
         <button class="chip" data-f="stays">Stays</button>
         <button class="chip" data-f="travel">Travel</button>
         <button class="chip" data-f="none">Hide</button>
+        <button class="chip" id="optional" title="Include optional items in totals">Count optional</button>
       </div>
-      <button class="btn primary" id="add">+ Add bar</button>
+      <label class="people">People <input id="people" type="number" min="1" max="99" step="1" inputmode="numeric"></label>
+      <button class="btn primary" id="add">+ Add</button>
     </section>
     <section class="summary" id="summary" aria-live="polite"></section>
 
     <main>
       <section class="card empty" id="empty" hidden>
-        <p>This plan is empty. Add a stay or a fixed window (like a visa) to start.</p>
-        <button class="btn primary" data-act="add">+ Add bar</button>
+        <p>This plan is empty. Add a stay, a day, or a fixed window (like a visa) to start.</p>
+        <button class="btn primary" data-act="add">+ Add</button>
         <button class="btn" data-act="sample">Use the sample plan</button>
       </section>
       <section class="timeline" id="timeline" aria-label="Timeline"></section>

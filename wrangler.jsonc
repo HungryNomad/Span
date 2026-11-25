@@ -35,5 +35,17 @@
 			"database_id": "a2c1c6ca-60d4-479f-a969-9cbe2e8ba3e8",
 			"migrations_dir": "migrations"
 		}
-	]
+	],
+	// Item pictures (resized in the browser, served only through /api/images).
+	"r2_buckets": [
+		{
+			"binding": "IMAGES",
+			"bucket_name": "span-images"
+		}
+	],
+	// Worker Previews (non-main branch builds). Previews don't inherit the
+	// production bindings above, and this block deliberately adds none, so a
+	// preview can never read or write the live plans or pictures. Plan and
+	// picture routes answer 503 there until preview-only resources are bound.
+	"previews": {}
 }
