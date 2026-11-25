@@ -40,6 +40,10 @@ h1 { font: 700 clamp(26px, 4vw, 34px)/1.05 var(--f-display); margin: 0; letter-s
 .sub { margin: 6px 0 0; color: var(--ink-2); max-width: 62ch; }
 .sample { font: 500 11px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; border: 1px dashed var(--ink-2); color: var(--ink-2); padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
 
+.top-actions { display: flex; align-items: center; gap: 10px; }
+.theme-btn { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px 6px 9px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.theme-btn svg { width: 16px; height: 16px; }
+
 /* Tabs */
 .tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 8; background: var(--bg); display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-block: 12px 10px; margin-top: 10px; }
 .tabs::-webkit-scrollbar { display: none; }
@@ -112,47 +116,20 @@ h1 { font: 700 clamp(26px, 4vw, 34px)/1.05 var(--f-display); margin: 0; letter-s
 .bar span { overflow: hidden; text-overflow: ellipsis; }
 .bar.tight span { display: none; }
 .bar.vn { background: var(--vn); } .bar.th { background: var(--th); } .bar.tw { background: var(--tw); }
-.bar.visa, .vbar.visa { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 11%, transparent) 0 5px, transparent 5px 10px); border: 1.5px dashed var(--ink); color: var(--ink); }
+.bar.visa { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 11%, transparent) 0 5px, transparent 5px 10px); border: 1.5px dashed var(--ink); color: var(--ink); }
 .bar.fl { height: 10px; padding: 0; background: var(--ink); border-radius: 5px; }
 .bar.fl.wide { height: 22px; padding: 0 8px; font: 500 11px var(--f-mono); color: var(--surface); }
-.bar.sel, .vbar.sel { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bar.sel { outline: 2px solid var(--accent); outline-offset: 2px; }
 .track { position: absolute; height: 32px; border-radius: 7px; background: color-mix(in srgb, var(--vn) 12%, transparent); border: 1px dashed color-mix(in srgb, var(--vn) 65%, transparent); }
 .handle { position: absolute; width: 16px; height: 32px; border-radius: 0 7px 7px 0; cursor: ew-resize; touch-action: none; display: grid; place-items: center; background: color-mix(in srgb, var(--on-bar) 28%, transparent); }
 .handle::before { content: ""; width: 4px; height: 14px; border-left: 1.5px solid var(--on-bar); border-right: 1.5px solid var(--on-bar); }
 .ftag { position: absolute; transform: translateX(-100%); height: 20px; display: flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font: 500 11px var(--f-mono); white-space: nowrap; cursor: pointer; }
 .fc { position: absolute; height: 20px; border: 0; border-right: 1px solid var(--surface); padding: 0; display: grid; place-items: center; overflow: hidden; font: 500 10.5px var(--f-mono); color: var(--ink); cursor: pointer; background: color-mix(in oklab, var(--hot) var(--p), var(--cool)); font-variant-numeric: tabular-nums; }
-.fc.hotx, .c-cell.hotx, .vchip.hotx, .nb-c.hotx { color: var(--on-hot); }
+.fc.hotx, .c-cell.hotx, .nb-c.hotx { color: var(--on-hot); }
 .fc.on { outline: 2px solid var(--ink); outline-offset: -2px; z-index: 2; }
 .fc.off { opacity: .22; }
 .fcode { position: absolute; transform: translateX(-100%); height: 20px; display: flex; align-items: center; font: 600 10.5px var(--f-mono); color: var(--ink-2); }
 @media (max-width: 560px) { .g-frame { --labw: 74px; } .g-lab { font-size: 12px; padding: 0 8px; } }
-
-/* View 2: day scroll */
-.v-scroll { height: min(68vh, 620px); overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
-.v-head { position: sticky; top: 0; z-index: 4; height: 30px; background: var(--surface); border-bottom: 1px solid var(--line); }
-.v-head span { position: absolute; top: 8px; font: 600 10.5px var(--f-mono); letter-spacing: .06em; color: var(--ink-2); text-align: center; }
-.v-inner { position: relative; }
-.v-inner.lined { background-image: repeating-linear-gradient(to bottom, transparent 0 calc(var(--rh) - 1px), color-mix(in srgb, var(--line) 55%, transparent) calc(var(--rh) - 1px) var(--rh)); }
-.vday { position: absolute; left: 8px; font: 11px var(--f-mono); color: var(--ink-2); white-space: nowrap; transform: translateY(-50%); }
-.vday b { color: var(--ink); font-weight: 600; }
-.vmon { position: absolute; left: 0; right: 0; border-top: 1px solid var(--ink-2); opacity: .5; }
-.vwe { position: absolute; left: 0; right: 0; background: color-mix(in srgb, var(--ink) 4%, transparent); }
-.vbar { position: absolute; border: 0; border-radius: 7px; padding: 10px 0; display: flex; justify-content: center; overflow: hidden; cursor: pointer; color: var(--on-bar); font-size: 12px; font-weight: 500; }
-.vbar span { writing-mode: vertical-rl; white-space: nowrap; }
-.vbar.visa { font-size: 10px; padding: 6px 0; }
-.vbar.vn { background: var(--vn); } .vbar.th { background: var(--th); } .vbar.tw { background: var(--tw); }
-.vtrack { position: absolute; border-radius: 7px; background: color-mix(in srgb, var(--vn) 12%, transparent); border: 1px dashed color-mix(in srgb, var(--vn) 65%, transparent); }
-.vhandle { position: absolute; height: 18px; border-radius: 0 0 7px 7px; background: var(--vn); cursor: ns-resize; touch-action: none; display: grid; place-items: center; z-index: 2; }
-.vhandle::before { content: ""; width: 16px; height: 5px; border-top: 1.5px solid var(--on-bar); border-bottom: 1.5px solid var(--on-bar); }
-.vtag { position: absolute; transform: translate(-50%, -50%); z-index: 2; display: flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font: 500 10.5px var(--f-mono); white-space: nowrap; cursor: pointer; }
-.vfare { position: absolute; display: flex; gap: 2px; }
-.vfare.col { flex-direction: column; justify-content: center; }
-.vchip { border: 0; border-radius: 5px; padding: 0 5px; text-align: left; font: 500 10.5px var(--f-mono); color: var(--ink); background: color-mix(in oklab, var(--hot) var(--p), var(--cool)); cursor: pointer; flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
-.vchip.on { outline: 2px solid var(--ink); outline-offset: -1px; }
-.vline { position: absolute; left: 0; right: 0; border-top: 1.5px solid var(--ink-2); }
-.vline.dl { border-top-style: dashed; border-top-color: var(--accent); border-left: 0; }
-.vline span { position: absolute; right: 8px; top: -9px; font: 600 10px var(--f-mono); padding: 0 4px; background: var(--surface); color: var(--ink-2); }
-.vline.dl span { color: var(--accent); }
 
 /* View 3: fare calendar */
 .c-top { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; margin-bottom: 12px; font-size: 12.5px; color: var(--ink-2); }
@@ -272,11 +249,14 @@ h1 { font: 700 clamp(26px, 4vw, 34px)/1.05 var(--f-display); margin: 0; letter-s
 <div class="wrap">
   <header class="top">
     <div>
-      <p class="eyebrow">Planner mockups · 5 directions</p>
+      <p class="eyebrow">Planner mockups · 4 directions</p>
       <h1>Span</h1>
       <p class="sub">Your 90-day Vietnam visa from Oct 20, an adjustable stay, and two 10-night options after it. Every view shares the same plan, so a change in one shows in the others.</p>
     </div>
-    <span class="sample">Sample prices · USD</span>
+    <div class="top-actions">
+      <span class="sample">Sample prices · USD</span>
+      <button class="theme-btn" id="theme" aria-pressed="false"></button>
+    </div>
   </header>
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="Mockup views"></nav>
@@ -750,82 +730,6 @@ const G = {
   },
 };
 
-/* ---------- View 2: day scroll ---------- */
-
-const VD1 = idxOf(2027, 3, 1);
-
-const V = {
-  z: 'Days',
-  /** @param {HTMLElement} el */
-  mount(el) {
-    el.innerHTML = `
-<div class="tools">
-  <div class="seg" id="v-z" role="group" aria-label="Row size">${['Months', 'Weeks', 'Days'].map(z => `<button data-z="${z}">${z}</button>`).join('')}</div>
-  <span class="hint">Drag the tab under the green bar. Tap a fare to leave that day.</span>
-</div>
-<div class="v-scroll" id="v-scroll"><div class="v-head" id="v-head"></div><div class="v-inner" id="v-inner"></div></div>`;
-    this.sc = $('#v-scroll', el); this.inner = $('#v-inner', el); this.head = $('#v-head', el);
-    this.syncZ = segment($('#v-z', el), 'z', () => this.z, z => { const c = this.center(); this.z = z; this.update(); this.centerOn(c); });
-    el.addEventListener('pointerdown', e => {
-      if (e.target.id !== 'v-handle') return;
-      dragDep(e, (cx, cy) => (cy - this.inner.getBoundingClientRect().top) / this.rh() + D0 - 0.5);
-    });
-    el.addEventListener('keydown', e => {
-      if (e.target.id !== 'v-handle') return;
-      const step = { ArrowUp: -1, ArrowDown: 1 }[e.key];
-      if (step) { e.preventDefault(); setDep(depIdx() + step); }
-    });
-    this.first = true;
-  },
-  rh() { return { Months: 6, Weeks: 16, Days: 44 }[this.z]; },
-  centerOn(i) { this.sc.scrollTop = (i - D0) * this.rh() - this.sc.clientHeight / 2 + 30; },
-  center() { return (this.sc.scrollTop + this.sc.clientHeight / 2 - 30) / this.rh() + D0; },
-  update() {
-    this.syncZ();
-    const rh = this.rh(), W = this.inner.clientWidth || 340, d = depIdx(), y = i => (i - D0) * rh;
-    const days = this.z === 'Days', gap = 6, gut = days ? 64 : 48, pc = days ? clamp(W * 0.24, 92, 124) : 30, vw = 16;
-    const lw = Math.max(30, (W - gut - vw - pc - gap * 5) / 3);
-    const L = { visa: gut + gap }; L.vn = L.visa + vw + gap; L.th = L.vn + lw + gap; L.tw = L.th + lw + gap; L.pc = L.tw + lw + gap;
-    this.head.innerHTML = [['DATE', 8, gut - 8], ['SGN', L.vn, lw], ['BKK', L.th, lw], ['TPE', L.tw, lw], ['FARES', L.pc, pc]]
-      .map(([t, l, w]) => `<span style="left:${l}px;width:${w}px;${t === 'DATE' ? 'text-align:left' : ''}">${t}</span>`).join('');
-    this.inner.style.height = `${y(VD1)}px`;
-    this.inner.style.setProperty('--rh', `${rh}px`);
-    this.inner.classList.toggle('lined', days);
-    let h = '';
-    if (days) for (let i = D0; i < VD1; i++) { const wd = dateOf(i).getUTCDay(); if (wd === 0 || wd === 6) h += `<div class="vwe" style="top:${y(i)}px;height:${rh}px"></div>`; }
-    monthStarts(D0, VD1 - 1).forEach(s => { h += `<div class="vmon" style="top:${y(s.i)}px"></div>`; });
-    for (let i = D0; i < VD1; i++) {
-      const dt = dateOf(i), first = dt.getUTCDate() === 1;
-      let lab = '';
-      if (days) lab = first ? `<b>${MON[dt.getUTCMonth()]} 1</b>` : `${WD[dt.getUTCDay()]} ${dt.getUTCDate()}`;
-      else if (first) lab = `<b>${MON[dt.getUTCMonth()]}</b>`;
-      else if (this.z === 'Weeks' && dt.getUTCDay() === 1 && dt.getUTCDate() > 3) lab = String(dt.getUTCDate());
-      if (lab) h += `<span class="vday" style="top:${y(i + 0.5)}px">${lab}</span>`;
-    }
-    const vbar = (id, cls, l, w, t0, t1, text) => `<button class="vbar ${cls}${S.sel === id ? ' sel' : ''}" data-sel="${id}" style="left:${l}px;width:${w}px;top:${t0}px;height:${t1 - t0}px" title="${text}"><span>${text}</span></button>`;
-    h += vbar('visa', 'visa', L.visa, vw, y(0), y(VISA_DAYS), '90-day e-visa');
-    h += `<div class="vtrack" style="left:${L.vn}px;width:${lw}px;top:${y(DEP_MIN)}px;height:${y(DEP_MAX + 1) - y(DEP_MIN)}px"></div>`;
-    h += vbar('vn', 'vn', L.vn, lw, y(0), y(d + 0.5), `Vietnam · ${S.stayDays} days${showStay() ? ' · ' + usd(vnCost().total) : ''}`);
-    h += `<div class="vhandle" id="v-handle" style="left:${L.vn}px;width:${lw}px;top:${y(d + 0.5) - 6}px" role="slider" tabindex="0" aria-label="Last day in Vietnam" aria-valuemin="60" aria-valuemax="90" aria-valuenow="${S.stayDays}" aria-valuetext="${fmt(d)}"></div>`;
-    ['th', 'tw'].forEach(k => {
-      const st = stayCost(k, d, OPT_NIGHTS);
-      h += vbar(k, k, L[k], lw, y(d + 0.5), y(d + OPT_NIGHTS + 0.5), `${PLACES[k].city} · 10 nights${showStay() ? ' · ' + usd(st.total) : ''}`);
-      h += `<button class="vtag" data-sel="fare:${k}:${d}" style="left:${L[k] + lw / 2}px;top:${y(d + 0.5) + 2}px">${PLANE}${showTravel() && days ? usd(fare(k, d)) : ''}</button>`;
-    });
-    if (showTravel()) {
-      const R = { th: fareRange('th'), tw: fareRange('tw') };
-      for (let i = DEP_MIN; i <= DEP_MAX; i++) {
-        const chip = k => { const v = fare(k, i), c = heat(v, ...R[k]); return `<button class="vchip${c.cls}${i === d ? ' on' : ''}" data-dep="${i}" data-sel="fare:${k}:${i}" style="${c.style}" aria-label="${ROUTES[k].code} ${fmt(i)} ${usd(v)}">${days ? `${PLACES[k].code} ${usd(v)}` : ''}</button>`; };
-        h += `<div class="vfare${days ? ' col' : ''}" style="left:${L.pc}px;width:${pc - 6}px;top:${y(i) + (days ? 2 : 0)}px;height:${rh - (days ? 4 : 1)}px">${chip('th')}${chip('tw')}</div>`;
-      }
-    }
-    h += `<div class="vline" style="top:${y(TODAY + NOW_H / 24)}px"><span>TODAY</span></div>`;
-    h += `<div class="vline dl" style="top:${y(VISA_DAYS)}px"><span>LEAVE BY ${fmt(89).toUpperCase()}</span></div>`;
-    this.inner.innerHTML = h;
-    if (this.first) { this.first = false; requestAnimationFrame(() => this.centerOn(d + 4)); }
-  },
-};
-
 /* ---------- View 3: fare calendar ---------- */
 
 const C = {
@@ -1128,9 +1032,6 @@ const VIEWS = [
   { id: 'timeline', name: 'Zoom timeline', obj: G,
     idea: 'A horizontal Gantt that zooms from hours to a year. Visa, stay and options are lanes, with a fare strip underneath for every possible departure day.',
     trade: 'Best overview on a laptop. On a phone it means sideways scrolling and thinner bars.' },
-  { id: 'scroll', name: 'Day scroll', obj: V,
-    idea: 'Time runs downward like a feed, built for the phone. Switch rows between months, weeks and days; fares sit beside each day.',
-    trade: 'Easy to thumb through, but you see a few weeks at a time rather than the whole year.' },
   { id: 'calendar', name: 'Fare calendar', obj: C,
     idea: 'Month grids colored by flight price, or by nightly cost when you filter to stays. Visa, stay and trip run as bands under each date.',
     trade: 'Fastest way to spot a cheap day. Overlapping plans get cramped in small cells.' },
@@ -1143,6 +1044,38 @@ const VIEWS = [
 ];
 
 let current = null;
+
+/* ---------- Theme toggle ---------- */
+
+const SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>';
+const MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1z"/></svg>';
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+
+/** Whether the page is currently dark, from an explicit choice or the system setting. */
+function isDark() { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : darkQuery.matches; }
+
+/** Update the toggle's icon and label to offer the opposite mode. */
+function syncTheme() {
+  const dark = isDark(), btn = $('#theme');
+  btn.innerHTML = `${dark ? SUN : MOON}${dark ? 'Light mode' : 'Dark mode'}`;
+  btn.setAttribute('aria-pressed', String(dark));
+  btn.setAttribute('aria-label', `Switch to ${dark ? 'light' : 'dark'} mode`);
+}
+
+/**
+ * Apply and remember a theme.
+ * @param {'light'|'dark'} mode
+ */
+function setTheme(mode) {
+  document.documentElement.dataset.theme = mode;
+  try { localStorage.setItem('span-theme', mode); } catch {}
+  syncTheme();
+}
+
+try { const saved = localStorage.getItem('span-theme'); if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved; } catch {}
+$('#theme').addEventListener('click', () => setTheme(isDark() ? 'light' : 'dark'));
+darkQuery.addEventListener('change', syncTheme);
+syncTheme();
 
 /** Draw controls, summary, the active view and the sheet. Keeps keyboard focus on a re-drawn handle. */
 function renderAll() {

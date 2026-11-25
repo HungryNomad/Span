@@ -12,7 +12,7 @@ UI mockups live in [`docs/mockups.html`](docs/mockups.html) (open it locally in 
 | `src/worker.ts` | API under `/api/*`; everything else is served from `public/` |
 | `migrations/` | D1 schema (`0001_plans.sql`: one JSON document per plan) |
 | `public/` | Static UI (placeholder for now) |
-| `docs/mockups.html` | The five UI directions |
+| `docs/mockups.html` | The UI directions (mockups) |
 
 ## API
 
