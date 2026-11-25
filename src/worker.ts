@@ -291,6 +291,8 @@ export default {
   async fetch(req, env): Promise<Response> {
     const { pathname } = new URL(req.url);
     if (!pathname.startsWith("/api/")) return env.ASSETS.fetch(req);
+    // Worker Previews run without production bindings (see `previews` in wrangler.jsonc).
+    if (!env.DB && pathname.startsWith("/api/plans")) return error(503, "plan storage is not set up (D1 binding DB)");
 
     let pathMatched = false;
     for (const [method, pattern, handler] of routes) {

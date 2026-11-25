@@ -42,5 +42,10 @@
 			"binding": "IMAGES",
 			"bucket_name": "span-images"
 		}
-	]
+	],
+	// Worker Previews (non-main branch builds). Previews don't inherit the
+	// production bindings above, and this block deliberately adds none, so a
+	// preview can never read or write the live plans or pictures. Plan and
+	// picture routes answer 503 there until preview-only resources are bound.
+	"previews": {}
 }
