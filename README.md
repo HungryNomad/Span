@@ -78,3 +78,4 @@ Zero Trust → Access → Applications → Add → Self-hosted:
 - Policy: Allow, include your email (and anyone you plan with)
 
 `workers_dev` and `preview_urls` are off in `wrangler.jsonc`, so the custom domain is the only way in.
+
