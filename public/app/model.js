@@ -859,7 +859,8 @@ export function sampleV1() {
 /**
  * The sample plan: a 90-day Vietnam visa from Oct 20 2026, a 59–89 night
  * stay split across rooms (one optional, with a gap at the end), and an
- * either/or group of three ways to continue. Prices are made up.
+ * either/or group of three ways to continue, with room options in Bangkok
+ * and Taipei. Prices are made up.
  * @returns {PlanDoc}
  */
 export function sampleDoc() {
@@ -872,5 +873,34 @@ export function sampleDoc() {
     room('vn-hanoi', 'Hanoi apartment', 0, 28, 26),
     room('vn-hoian', 'Hoi An homestay', 28, 30, 38),
     room('vn-saigon', 'Saigon studio', 54, 30, 31, false));
+  addRooms(doc);
   return doc;
+}
+
+/**
+ * Sample room options for the Bangkok and Taipei stays: an either/or pick of
+ * three Bangkok rooms, and a Taipei stay split into an apartment then a pick
+ * of two places for the last nights. The rooms carry the room price, so the
+ * stays' own Room lines are dropped. Names and prices are made up.
+ * @param {PlanDoc} doc Plan holding the `bkk` and `tpe` stays.
+ */
+function addRooms(doc) {
+  /** @type {(id: string, name: string, parent: string, rate: number, color: string, offset: number, len: number) => Item} */
+  const room = (id, name, parent, rate, color, offset, len) =>
+    makeItem({ id, name, parent, offset, len, color, costs: [{ label: 'Room', type: 'per', amount: rate, pp: false }] });
+  /** @type {(id: string, name: string, parent: string, offset: number) => Item} */
+  const group = (id, name, parent, offset) => makeItem({ id, kind: 'group', name, parent, offset });
+  const bkk = /** @type {Item} */ (byId(doc, 'bkk')), tpe = /** @type {Item} */ (byId(doc, 'tpe'));
+  const nb = bkk.len ?? 10, nt = tpe.len ?? 10, first = Math.ceil(nt / 2);
+  for (const it of [bkk, tpe]) it.costs = it.costs.filter((c) => c.label !== 'Room');
+  doc.items.splice(doc.items.indexOf(bkk) + 1, 0,
+    group('bkk-rooms', 'Bangkok room', 'bkk', 0),
+    room('bkk-sukhumvit', 'Sukhumvit condo', 'bkk-rooms', 42, 'orange', 0, nb),
+    room('bkk-ari', 'Ari studio', 'bkk-rooms', 35, 'orange', 0, nb),
+    room('bkk-riverside', 'Riverside hotel', 'bkk-rooms', 68, 'orange', 0, nb));
+  doc.items.splice(doc.items.indexOf(tpe) + 1, 0,
+    room('tpe-daan', "Da'an apartment", 'tpe', 70, 'blue', 0, first),
+    group('tpe-last', `Last ${nt - first} nights`, 'tpe', first),
+    room('tpe-zhongshan', 'Zhongshan hotel', 'tpe-last', 85, 'blue', 0, nt - first),
+    room('tpe-beitou', 'Beitou hot spring inn', 'tpe-last', 115, 'blue', 0, nt - first));
 }
