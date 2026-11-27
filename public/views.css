@@ -23,7 +23,8 @@
 .ln-tools { margin-bottom: 6px; }
 .ln-all { margin-left: auto; }
 .ln-hint { margin: 0 0 10px; font-size: 12.5px; color: var(--ink-2); }
-.ln-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
+.lanes { min-width: 0; }
+.ln-scroll { max-width: 100%; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
 .lanes.dragging, .lanes.dragging * { cursor: ew-resize !important; user-select: none; }
 .ln-grid { position: relative; }
 .ln-shade { position: absolute; inset: 0; pointer-events: none; }
