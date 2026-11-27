@@ -667,8 +667,8 @@ export class Lanes {
       for (const k of kids) {
         const pk = k.kind === 'group' ? kidsOf(doc, k.id)[0] : k;
         if (k.kind === 'window' || (k.kind === 'group' && isFork(doc, k)) || (kidsOf(doc, k.id).length && open.has(k.id))) own.push(k);
-        else if (pk && isHop(pk)) lanes.move.push(k);
         else if (pk && typeOf(pk) === 'event') lanes.event.push(k);
+        else if (pk && isHop(pk)) lanes.move.push(k);
         else lanes.stay.push(k);
       }
       const names = { stay: 'Stays', move: 'Moves', event: 'Events' };
@@ -798,7 +798,7 @@ export class Lanes {
 
   /**
    * The pinned Beds row: where everyone sleeps each night, one line per
-   * person when they're ever apart. A night with nothing booked is a red
+   * person when their bookings ever differ. A night with nothing booked is a red
    * gap (tap it to open its placeholder, if there is one), a night booked
    * twice is amber.
    * @param {import('./model.js').PlanDoc} doc
@@ -813,11 +813,17 @@ export class Lanes {
   bedsRow(doc, at, optional, x, pill, d0, d1) {
     const bd = beds(doc, at, optional);
     if (!bd) return '';
-    const lines = bd.split ? bd.lines : bd.lines.slice(0, 1), gaps = nightsIn(gapRuns(bd));
+    // One line per person only when their bookings differ; apart but both unbooked reads as one gap naming where each is.
+    const key = (/** @type {import('./checks.js').BedLine} */ l) => l.runs.map((r) => `${r.a}:${r.b}:${r.ids}`).join('|');
+    const apart = bd.split && bd.lines.some((l) => key(l) !== key(bd.lines[0]));
+    const lines = apart ? bd.lines : bd.lines.slice(0, 1), gaps = nightsIn(gapRuns(bd));
+    /** Where each person is during a run, when they're apart ("Sam: Tokyo · Alex: Berlin"). */
+    const whereAt = (/** @type {import('./checks.js').BedRun} */ run) => (apart || !bd.split ? run.where ?? ''
+      : bd.lines.map((l) => { const r = l.runs.find((q) => q.a <= run.a && run.a < q.b); return r?.where ? `${l.who}: ${r.where}` : ''; }).filter(Boolean).join(' · '));
     let trk = '', who = '';
     lines.forEach((line, i) => {
       const top = 6 + i * LINE;
-      if (bd.split && line.who) who += `<span class="ln-who" style="top:${top + 4}px">${esc(line.who)}</span>`;
+      if (apart && line.who) who += `<span class="ln-who" style="top:${top + 4}px">${esc(line.who)}</span>`;
       for (const r of line.runs) {
         const n = r.b - r.a, nights = `${n}n`, a = Math.max(r.a, d0), b = Math.min(r.b, d1);
         if (r.ids.length === 1) {
@@ -826,13 +832,13 @@ export class Lanes {
         } else if (r.ids.length > 1) {
           trk += `<button class="ln-bed dbl" style="left:${x(a) + 1}px;width:${Math.max((b - a) * (x(1) - x(0)) - 2, 8)}px;top:${top}px" data-sel="item:${esc(r.ids[1])}" title="Booked twice: ${n} night${n === 1 ? '' : 's'} from ${fmt(r.a)}">${n > 1 ? `Booked twice · ${nights}` : '2×'}</button>`;
         } else {
-          const ph = r.maybe[0], where = r.where ? `${esc(r.where)}: ` : '';
-          const tip = `${r.where ? `${r.where}: ` : ''}nothing booked for ${n} night${n === 1 ? '' : 's'} from ${fmt(r.a)}`;
+          const ph = r.maybe[0], at = whereAt(r), where = at ? `${esc(at)}: ` : '';
+          const tip = `${at ? `${at}: ` : ''}nothing booked for ${n} night${n === 1 ? '' : 's'} from ${fmt(r.a)}`;
           trk += `<button class="ln-bed gap" style="left:${x(a) + 1}px;width:${Math.max((b - a) * (x(1) - x(0)) - 2, 8)}px;top:${top}px"${ph ? ` data-sel="item:${esc(ph)}"` : ''} title="${esc(tip)}">${where}No bed · ${nights}</button>`;
         }
       }
     });
-    const h = bd.split ? 12 + lines.length * LINE : ROW;
+    const h = apart ? 12 + lines.length * LINE : ROW;
     const sub = gaps ? `<small class="bad">${gaps} unbooked</small>` : '<small>all booked</small>';
     return `<div class="ln-row ln-beds d0" style="height:${h}px"><div class="ln-lab" style="--dep:0"><span class="ln-car none" aria-hidden="true"></span><span class="ln-n">Beds</span>${sub}${who}</div><div class="ln-trk" style="width:${Math.ceil(x(d1))}px">${trk}</div></div>`;
   }
