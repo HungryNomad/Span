@@ -64,6 +64,7 @@
  * @property {CostLine[]} costs
  * @property {string} color One of {@link COLORS}.
  * @property {string} [note]
+ * @property {string} [who] The one person this item is for (a name); unset means everyone. Children inherit it.
  * @property {string[]} links Listing pages (http/https).
  * @property {string[]} images Ids of pictures stored through `/api/images`.
  */
@@ -1025,6 +1026,7 @@ export function normalize(raw) {
     if (kind !== 'window') it.committed = r.committed !== false;
     if (COLORS.includes(r.color)) it.color = r.color;
     if (str(r.note)) it.note = str(r.note).slice(0, 2000);
+    if (kind !== 'window' && str(r.who).trim()) it.who = str(r.who).trim().slice(0, 40);
     if (kind === 'item' && Array.isArray(r.costs)) {
       for (const c of r.costs.slice(0, 12)) {
         if (!c || typeof c !== 'object') continue;

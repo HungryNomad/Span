@@ -7,13 +7,36 @@
  *
  * @module
  */
-import { focusGroupOf, fmt, insideName, kidsOf, layout, money, optionCost, pick, pivotOf, rangeOf, setRank, total } from './model.js';
+import { unpricedIn } from './checks.js';
+import { focusGroupOf, fmt, insideName, kidsOf, layout, money, optionCost, pick, pivotOf, rangeOf, setRank, total, typeOf } from './model.js';
 import { $, drag, esc, niceTicks } from './ui.js';
 
 /** @typedef {import('./ui.js').App} App */
 
 /** Filter labels. */
 const TAG = { all: 'stays + travel', stays: 'stays only', travel: 'travel only', none: 'costs hidden' };
+
+/**
+ * Stays and transports inside an item that have no price yet, by kind.
+ * @param {import('./model.js').PlanDoc} doc
+ * @param {boolean} optional
+ * @param {string} id
+ * @returns {{stay: number, travel: number}}
+ */
+function unpriced(doc, optional, id) {
+  const list = unpricedIn(doc, optional, id), stay = list.filter((it) => typeOf(it) === 'stay').length;
+  return { stay, travel: list.length - stay };
+}
+
+/**
+ * An amount in words: "No price yet" when it's nothing and items have no
+ * price, else the amount plus how many items it's missing.
+ * @param {number} amount
+ * @param {number} n Items with no price yet.
+ * @param {string} cur Currency.
+ * @returns {string}
+ */
+const priceText = (amount, n, cur) => (n && !amount ? 'No price yet' : `${money(amount, cur)}${n ? ` + ${n} unpriced` : ''}`);
 
 export class Compare {
   /**
@@ -68,17 +91,24 @@ export class Compare {
     });
     const now = series.map((v) => v[len - mn]);
     const low = Math.min(...now.map((c) => c.total));
+    // Unpriced items the filter counts, per option; "Lowest" only goes to a price when every option has one.
+    const gaps = opts.map((o) => unpriced(doc, optional, o.id));
+    const missing = gaps.map((u) => pick(u, filter));
+    const allPriced = missing.every((n) => !n);
+    /** @param {number} v @param {number} n @returns {string} One part of the breakdown. */
+    const part = (v, n) => (n && !v ? 'unpriced' : priceText(v, n, cur));
 
     $('#s-h', this.el).textContent = `Compare: ${group.name}`;
-    const head = pivot ? (() => { const ps = total(doc, { optional, root: pivot.id, at }); return ` ${pivot.name} itself: ${hide ? 'hidden' : money(pick(ps, filter), cur)}.`; })() : '';
+    const head = pivot ? (() => { const ps = total(doc, { optional, root: pivot.id, at }); return ` ${pivot.name} itself: ${hide ? 'hidden' : priceText(pick(ps, filter), pick(unpriced(doc, optional, pivot.id), filter), cur)}.`; })() : '';
     $('#s-sub', this.el).textContent = `What each option costs, ${TAG[filter]}${optional ? ', optional items included' : ''}. The top one is your pick and counts in totals.${head}`;
     $('#s-list', this.el).innerHTML = opts.map((o, j) => {
       const c = now[j], best = series[j].reduce((a, b, n) => (b.total < a.t ? { n: mn + n, t: b.total } : a), { n: len, t: c.total });
-      const isLow = !hide && c.total === low && opts.length > 1, inside = insideName(doc, o, at);
+      const isLow = !hide && allPriced && c.total === low && opts.length > 1, inside = insideName(doc, o, at), u = gaps[j];
+      const costs = u.stay + u.travel && !c.stay && !c.travel ? 'No price yet' : `Stays ${part(c.stay, u.stay)} · Travel ${part(c.travel, u.travel)}`;
       return `<article class="s-row card${isLow ? ' best' : ''}${j === 0 ? ' picked' : ''}">
   <div class="s-name"><span class="sw c-${colors[j]}"></span><button class="s-open" data-sel="item:${esc(o.id)}"><h3>${esc(o.name)}</h3></button>${j === 0 ? '<span class="pill">Pick</span>' : ''}${isLow ? '<span class="pill low">Lowest</span>' : ''}</div>
-  <div class="s-break">${inside ? `${esc(inside)} · ` : ''}${hide ? '' : `Stays ${money(c.stay, cur)} · Travel ${money(c.travel, cur)} · `}${fmt(c.depart)} → ${fmt(c.end)}</div>
-  <div class="s-total"><b>${hide ? '—' : money(c.total, cur)}</b><small>${TAG[filter]}</small></div>
+  <div class="s-break">${inside ? `${esc(inside)} · ` : ''}${hide ? '' : `${esc(costs)} · `}${fmt(c.depart)} → ${fmt(c.end)}</div>
+  <div class="s-total"><b>${hide ? '—' : priceText(c.total, missing[j], cur)}</b><small>${TAG[filter]}</small></div>
   <div class="s-acts">${j ? `<button class="s-apply" data-pick="${esc(o.id)}">Make this the pick</button>` : ''}${pivot && !hide && best.n !== len ? `<button class="s-apply" data-len="${best.n}">Cheapest: leave ${fmt(c.depart - len + best.n, { weekday: 'short' })} for ${money(best.t, cur)}, saves ${money(c.total - best.t, cur)}</button>` : ''}</div>
 </article>`;
     }).join('');

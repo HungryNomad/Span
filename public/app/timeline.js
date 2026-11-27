@@ -9,10 +9,10 @@
  */
 import {
   ancestors, byId, clamp, counted, coverage, dateOf, departRoutes, fareOn, fmt, hhmm, inGroup, isRanged, kidsOf,
-  layout, money, nowIdx, pivotOf, rangeOf, routeLabel, setRank, total, unitText, UNIT_DAYS,
+  layout, money, nowIdx, pivotOf, rangeOf, routeLabel, setRank, subtree, total, unitText, UNIT_DAYS,
 } from './model.js';
 import { $, drag, esc, heat, PLANE } from './ui.js';
-import { axisMarks, fromSlider, levelOf, markPreset, PPD_MAX, PRESETS, toSlider, wireZoom, zoomControls } from './zoomkit.js';
+import { axisMarks, FIT, fromSlider, levelOf, markPreset, PPD_MAX, PRESETS, toSlider, wireZoom, zoomControls } from './zoomkit.js';
 
 export { axisTicks } from './zoomkit.js';
 
@@ -21,6 +21,7 @@ export { axisTicks } from './zoomkit.js';
 /** @typedef {import('./model.js').Placed} Placed */
 /** @typedef {import('./model.js').PlanDoc} PlanDoc */
 /** @typedef {{item: Item, depth: number}} Row */
+/** @typedef {import('./zoomkit.js').Preset | typeof FIT} Zoom A preset, or fitting the whole plan. */
 
 /** Row geometry in px. */
 const AXIS = 48, ROW = 44, FARE = 24;
@@ -150,10 +151,10 @@ export class Timeline {
     this.crumbs = $('#g-crumbs', el);
     this.zoom = /** @type {HTMLInputElement} */ ($('[data-zs]', el));
     this.pre = $('[data-zp]', el);
-    /** When true, the next render with a measurable width jumps to the Months preset. */
+    /** When true, the next render with a measurable width fits the whole plan. */
     this.fresh = true;
-    /** Preset picked last, until you zoom by hand. */
-    this.active = /** @type {import('./zoomkit.js').Preset | null} */ (null);
+    /** Preset picked last (or Fit), until you zoom by hand. */
+    this.active = /** @type {Zoom | null} */ (null);
     /** Scroller width at the last render, to notice a resize. */
     this.vw = 0;
     this.wire(el);
@@ -169,7 +170,7 @@ export class Timeline {
     this.zoom.addEventListener('input', () => this.zoomTo(this.fromSlider(+this.zoom.value)));
     this.pre.addEventListener('click', (e) => {
       const b = /** @type {HTMLElement} */ (e.target).closest('button');
-      if (b) this.preset(/** @type {import('./zoomkit.js').Preset} */ (b.dataset.p));
+      if (b) this.preset(/** @type {Zoom} */ (b.dataset.p));
     });
     wireZoom(this.sc, () => this.ppd, (p, anchor) => this.zoomTo(p, anchor));
     this.sc.addEventListener('touchmove', (e) => { if (this.touchDrag) e.preventDefault(); }, { passive: false });
@@ -327,12 +328,44 @@ export class Timeline {
   }
 
   /**
+   * Days the whole plan covers (or the drilled-in item's), leaving out
+   * constraints, with half a day spare at each end.
+   * @param {import('./model.js').Layout} at
+   * @returns {[number, number]} First and last day to show.
+   */
+  fitSpan(at) {
+    const { doc, drill } = this.app, ids = drill && byId(doc, drill) ? subtree(doc, drill) : null;
+    const all = [...at.values()].filter((p) => !ids || ids.has(p.item.id)), items = all.filter((p) => p.item.kind !== 'window');
+    const list = items.length ? items : all;
+    if (!list.length) return [nowIdx(), nowIdx() + PRESETS.Months];
+    return [Math.min(...list.map((p) => p.start)) - 0.5, Math.max(...list.map((p) => Math.max(p.end, p.show))) + 0.5];
+  }
+
+  /**
+   * Zooms so the whole plan fits the visible width, scrolled to its start.
+   * @param {[number, number]} span From {@link fitSpan}.
+   */
+  fitTo([a, b]) {
+    this.ppd = clamp(this.w() / Math.max(b - a, 1 / 24), this.ppdMin(), PPD_MAX);
+    this.render();
+    this.sc.scrollLeft = this.x(a);
+    this.drawAxis();
+  }
+
+  /**
    * Jumps to a preset span, centred on what matters at that scale: the
-   * departure day for short spans, everything in view for long ones.
-   * @param {import('./zoomkit.js').Preset} name
+   * departure day for short spans, everything in view for long ones. Fit
+   * shows the whole plan instead.
+   * @param {Zoom} name
    */
   preset(name) {
     const { doc } = this.app, at = layout(doc), shown = this.viewPlaced(at);
+    if (name === FIT) {
+      this.fresh = false;
+      this.active = FIT;
+      this.updateRange();
+      return this.fitTo(this.fitSpan(at));
+    }
     const pivot = pivotOf(doc), today = nowIdx();
     const focus = pivot && !this.app.drill ? /** @type {Placed} */ (at.get(pivot.id)).end : shown.length ? shown[0].start : today;
     const mid = shown.length ? (Math.min(...shown.map((p) => p.start)) + Math.max(...shown.map((p) => p.show))) / 2 : today;
@@ -346,7 +379,7 @@ export class Timeline {
     this.drawAxis();
   }
 
-  /** Forgets the zoom so the next render starts at the Months preset. */
+  /** Forgets the zoom so the next render fits the whole plan again. */
   reset() { this.fresh = true; }
 
   /**
@@ -378,15 +411,18 @@ export class Timeline {
 
   /** Redraws rows, bars, flights, coverage marks and the fare strip. */
   render() {
-    if (this.fresh && this.app.doc.items.length && this.sc.clientWidth) return this.preset('Months');
+    if (this.fresh && this.app.doc.items.length && this.sc.clientWidth) return this.preset(FIT);
     const { doc, filter, sel, optional, drill } = this.app;
     const at = layout(doc), today = nowIdx(), cov = coverage(doc, at, optional), live = counted(doc, optional);
     const showStay = filter === 'all' || filter === 'stays', showTravel = filter === 'all' || filter === 'travel';
-    // A preset keeps its span when the window resizes, around the same middle day.
-    const vw = this.sc.clientWidth, mid = this.active && this.vw && vw && vw !== this.vw ? (this.sc.scrollLeft + this.vw / 2) / this.ppd + this.d0 : undefined;
+    // A preset keeps its span when the window resizes, around the same middle day; Fit fits again.
+    const vw = this.sc.clientWidth, resized = !!(this.active && this.vw && vw && vw !== this.vw);
+    const fit = resized && this.active === FIT ? this.fitSpan(at) : null;
+    const mid = resized && !fit ? (this.sc.scrollLeft + this.vw / 2) / this.ppd + this.d0 : undefined;
     if (vw) this.vw = vw;
     const shift = this.updateRange();
-    if (mid !== undefined && this.active) this.ppd = vw / PRESETS[this.active];
+    if (fit) this.ppd = vw / Math.max(fit[1] - fit[0], 1 / 24);
+    else if (mid !== undefined && this.active && this.active !== FIT) this.ppd = vw / PRESETS[this.active];
     this.ppd = this.ppd ? clamp(this.ppd, this.ppdMin(), PPD_MAX) : this.ppdMin();
     const p = this.ppd, x = (/** @type {number} */ i) => this.x(i);
 
@@ -502,7 +538,8 @@ export class Timeline {
     }
     h += `<div class="today" style="left:${x(today)}px"></div>`;
     this.bars.innerHTML = h;
-    if (mid !== undefined) this.sc.scrollLeft = this.x(mid) - vw / 2;
+    if (fit) this.sc.scrollLeft = this.x(fit[0]);
+    else if (mid !== undefined) this.sc.scrollLeft = this.x(mid) - vw / 2;
     else if (shift) this.sc.scrollLeft += shift;
     this.drawAxis();
   }
@@ -512,7 +549,7 @@ export class Timeline {
     const p = this.ppd, sl = this.sc.scrollLeft, w = this.w();
     if (!p) return;
     const a = Math.max(this.d0, sl / p + this.d0 - 1), b = Math.min(this.d1, (sl + w) / p + this.d0 + 1);
-    const level = this.active ?? levelOf(w / p);
+    const level = this.active && this.active !== FIT ? this.active : levelOf(w / p);
     const { axis, grid } = axisMarks(a, b, p, (i) => this.x(i), sl, level);
     let gr = grid;
     for (let r = 1; r <= this.rows.length; r++) gr += `<i class="hl" style="top:${r * ROW}px"></i>`;
@@ -520,6 +557,6 @@ export class Timeline {
     this.grid.innerHTML = gr;
     const label = document.getElementById('g-scale');
     if (label) label.textContent = level;
-    markPreset(this.pre, level);
+    markPreset(this.pre, this.active === FIT ? FIT : level);
   }
 }
