@@ -7,7 +7,7 @@
  *
  * @module
  */
-import { ancestors, byId, fmt, isMoment, kidsOf, layout, subtree, typeOf } from './model.js';
+import { ancestors, byId, fmt, isMoment, isPicked, kidsOf, layout, subtree, typeOf } from './model.js';
 import { forkOf, hops, sleeps, withPick } from './trip.js';
 
 /** @typedef {import('./model.js').PlanDoc} PlanDoc */
@@ -191,11 +191,15 @@ export function legsOf(doc, id) {
  */
 export function missingMoves(doc, at, optional) {
   const { stops } = stopsOf(doc, at, optional);
+  // Moves already planned but not booked (optional placeholders) aren't missing: they show as unbooked.
+  const planned = doc.items.filter((it) => it.kind === 'item' && typeOf(it) === 'transport' && isPicked(doc, it))
+    .map((it) => Math.floor(/** @type {Placed} */ (at.get(it.id)).start));
   /** @type {Missing[]} */
   const out = [];
   for (let i = 1; i < stops.length; i++) {
     const a = stops[i - 1], b = stops[i];
     if (a.name === b.name || !a.sure || !b.sure || a.hops.length) continue;
+    if (planned.some((d) => d >= Math.floor(a.end) - 1 && d <= Math.floor(b.start))) continue;
     out.push({ from: a.name, to: b.name, day: Math.floor(b.start), stay: b.stays[0].item });
   }
   return out;
