@@ -49,3 +49,12 @@ test('narrow bubbles show as much of the name as fits', () => {
   assert.equal(shortName('Chiang Mai · 11n', 74), 'Chiang Mai');
   assert.equal(shortName('Chiang Mai · 11n', 16), '');
 });
+
+test('a leading label with no room is dropped, not cut off under the names', () => {
+  const a = M.dayOf('2026-12-20'), ppd = 330 / 365, x = (/** @type {number} */ d) => (d - a) * ppd;
+  const { axis } = Z.axisMarks(a, a + 365, ppd, x, 0, 'Year');
+  assert.ok(!axis.includes('>2026<'), 'squeezed 2026 is dropped');
+  assert.ok(axis.includes('>2027<'));
+  const b = M.dayOf('2026-12-01'), wide = Z.axisMarks(b, b + 365, 1180 / 365, (d) => (d - b) * 1180 / 365, 0, 'Year');
+  assert.ok(wide.axis.includes('>2026<'), 'with room it stays');
+});

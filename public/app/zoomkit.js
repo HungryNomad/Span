@@ -185,19 +185,22 @@ export function axisMarks(a, b, ppd, x, left, level, gx = 0) {
       if (wd === 0 || wd === 6) grid += `<i class="we" style="left:${gx + x(i)}px;width:${ppd}px"></i>`;
     }
   }
-  /** Where a label goes: at its tick, or held at the view's left edge until the next tick (less `room`) pushes it out. */
+  /** Where a label goes: at its tick, or held at the view's left edge until the next tick (less `room`) would push it under the names, when it is dropped (null). */
   const at = (/** @type {[number, string][]} */ list, /** @type {number} */ j, /** @type {number} */ pad, /** @type {number} */ room) => {
     const X = x(list[j][0]), next = list[j + 1] ? x(list[j + 1][0]) : Infinity;
-    return Math.max(X + pad, Math.min(left + pad, next - room));
+    const pos = Math.max(X + pad, Math.min(left + pad, next - room));
+    return X < left && pos < left + pad ? null : pos;
   };
   minor.forEach(([i, lab], j) => {
     const X = x(i);
     if (i >= a) axis += `<i class="tk" style="left:${X}px"></i>`, grid += `<i class="gl" style="left:${gx + X}px"></i>`;
-    axis += `<span class="tkl" style="left:${i >= a ? X + 4 : at(minor, j, 4, lab.length * 7 + 10)}px">${lab}</span>`;
+    const L = i >= a ? X + 4 : at(minor, j, 4, lab.length * 7 + 10);
+    if (L !== null) axis += `<span class="tkl" style="left:${L}px">${lab}</span>`;
   });
   major.forEach(([i, lab], j) => {
     if (i >= a) grid += `<i class="gl m" style="left:${gx + x(i)}px"></i>`;
-    axis += `<span class="mj" style="left:${at(major, j, 6, lab.length * 7 + 16)}px">${lab}</span>`;
+    const L = at(major, j, 6, lab.length * 7 + 16);
+    if (L !== null) axis += `<span class="mj" style="left:${L}px">${lab}</span>`;
   });
   const today = nowIdx();
   if (today >= a && today <= b) axis += `<span class="todaytag" style="left:${x(today)}px">Today</span>`;
