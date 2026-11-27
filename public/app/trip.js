@@ -160,6 +160,8 @@ export function sleeps(doc, at, optional) {
 const HOP_CODES = /\b([A-Z]{3})\s*(?:→|->|–|\bto\b)\s*([A-Z]{3})\b/;
 /** Pulls places out of a name like "Taipei to Tainan". */
 const HOP_NAME = /^\s*(.+?)\s*(?:→|->|–|\bto\b)\s*(.+?)\s*$/i;
+/** A vehicle word that leads a move's name, as in "Van Mui Ne → Nha Trang". */
+const LEAD_MODE = /^(?:(?:private|shared|night)\s+)?(?:van|minivan|bus|coach|train|ferry|boat|car|taxi|grab|shuttle|transfer|drive)\s+/i;
 
 /**
  * Counted moves between places, in time order.
@@ -178,7 +180,7 @@ export function hops(doc, at, optional) {
     if (typeOf(it) === 'transport') {
       const m = HOP_CODES.exec(it.name) ?? HOP_NAME.exec(it.name);
       const cost = itemCost(doc, p);
-      out.push({ item: it, at: p.start, hours: (p.end - p.start) * 24, label: it.name, from: m?.[1], to: m?.[2], cost: cost.stay + cost.travel });
+      out.push({ item: it, at: p.start, hours: (p.end - p.start) * 24, label: it.name, from: m?.[1].replace(LEAD_MODE, ''), to: m?.[2], cost: cost.stay + cost.travel });
       continue;
     }
     for (const line of it.costs) {

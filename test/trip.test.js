@@ -79,3 +79,11 @@ test('events are not moves', () => {
   assert.ok(!T.hops(doc, at, false).some((h) => h.item.id === 'ev'));
   assert.equal(M.byId(doc, 'tw-train')?.mode, 'train');
 });
+
+test('a vehicle word that leads a move is not part of where it starts', () => {
+  const doc = M.normalize({ v: 2, currency: 'USD', people: 2, routes: {}, items: [
+    M.makeItem(/** @type {any} */ ({ id: 'v', name: 'Van Lisbon → Porto', type: 'transport', mode: 'car', unit: 'hour', start: '2027-01-04', at: 9, len: 3 })),
+  ] });
+  const [h] = T.hops(doc, M.layout(doc), false);
+  assert.deepEqual([h.from, h.to], ['Lisbon', 'Porto']);
+});

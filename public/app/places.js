@@ -386,6 +386,8 @@ export function moveParent(doc, stay) {
  * @property {Item} item The stay or move that's too late.
  * @property {number} day Day it happens (a stay's last morning, a move's day).
  * @property {string} text e.g. "KHH → SGN on Tue, Jan 19 is after Vietnam e-visa ends Sun, Jan 17".
+ * @property {string} where The place it happens in, e.g. "Saigon".
+ * @property {number} last The window's last day.
  * @property {string} [trip] The fork option it's in, when that trip isn't the pick.
  */
 
@@ -432,12 +434,12 @@ export function pastWindows(doc, optional) {
       for (const s of stops) {
         if (!covered.has(s.name) || Math.floor(s.end) <= last) continue;
         const item = /** @type {Placed} */ (s.stays.at(-1)).item;
-        out.push({ window: w, item, day: Math.floor(s.end), text: `${s.name} until ${fmt(s.end, { weekday: 'short' })} is after ${ends}`, trip });
+        out.push({ window: w, item, day: Math.floor(s.end), where: s.name, last, text: `${s.name} until ${fmt(s.end, { weekday: 'short' })} is after ${ends}`, trip });
       }
       for (const h of hops(d, at, optional)) {
         const to = cityIn(h.to ?? h.label.split(/→|->/).pop() ?? '');
         if (!to || !covered.has(to.name) || Math.floor(h.at) <= last) continue;
-        out.push({ window: w, item: h.item, day: Math.floor(h.at), text: `${h.label} on ${fmt(h.at, { weekday: 'short' })} is after ${ends}`, trip });
+        out.push({ window: w, item: h.item, day: Math.floor(h.at), where: to.name, last, text: `${h.label} on ${fmt(h.at, { weekday: 'short' })} is after ${ends}`, trip });
       }
     }
   }
