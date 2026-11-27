@@ -322,7 +322,7 @@ function issuesOf() {
     out.push({ key: `ovl:${id}`, tone: 'ovl', label: `${n} booked twice in ${trip}`, rows: c.overlaps.map(([a, b]) => ({ text: `${it.name} · ${nightsText(a, b)}`, a, b, sel: `item:${id}`, fix: id })) });
   }
   for (const w of pastWindows(doc, optional)) {
-    out.push({ key: `win:${w.item.id}`, tone: 'gap', label: `After ${w.window.name}`, rows: [{ text: `${w.text}${w.trip ? ` (${w.trip})` : ''}`, sel: `item:${w.item.id}` }] });
+    out.push({ key: `win:${w.item.id}`, tone: 'gap', label: `${w.where} past ${fmt(w.last)}`, rows: [{ text: `${w.text}${w.trip ? ` (${w.trip})` : ''}`, sel: `item:${w.item.id}` }] });
   }
   const miss = missingMoves(doc, at, optional);
   if (miss.length) {
