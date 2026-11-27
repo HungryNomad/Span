@@ -12,6 +12,7 @@ import {
   kidsOf, layout, lineCost, makeItem, MAX_IMAGES, MAX_LINKS, modeOf, MODES, money, nowIdx, parseHhmm, pruneRoutes, removeItem, routeKey,
   routeLabel, setEdge, setRank, siteOf, subtree, total, TYPES, typeOf, uid, unitText, unitsOf, UNIT_WORDS, insertItem, isMoment, fixOverlaps,
 } from './model.js';
+import { isUnpriced, peopleOf, unpricedIn, whoOf } from './checks.js';
 import { missingMoves, moveParent, pastWindows } from './places.js';
 import { forkOf } from './trip.js';
 import { $, esc, heat } from './ui.js';
@@ -22,6 +23,7 @@ import { $, esc, heat } from './ui.js';
 /** @typedef {import('./model.js').CostLine} CostLine */
 /** @typedef {import('./model.js').Route} Route */
 /** @typedef {import('./model.js').Placed} Placed */
+/** @typedef {import('./model.js').Layout} Layout */
 
 /**
  * What the sheet shows.
@@ -143,15 +145,45 @@ function nearby(doc, key, center) {
 }
 
 /**
- * Human dates for a placed item.
+ * Human dates for a placed item, through the last of what it holds (a day
+ * event holding a flight the day after it ends runs to that flight). One
+ * day shows as just that day.
+ * @param {PlanDoc} doc
+ * @param {Layout} at
  * @param {Placed} p
  * @returns {string}
  */
-function datesOf(p) {
+function datesOf(doc, at, p) {
   const u = p.item.unit;
   if (u === 'hour') return `${fmt(p.start, { weekday: 'short' })} ${hhmm((p.start % 1) * 24)} – ${hhmm((p.end % 1) * 24)}${Math.floor(p.end) > Math.floor(p.start) ? ` (${fmt(p.end)})` : ''}`;
-  return `${fmt(p.start)} – ${fmt(u === 'night' ? p.end : p.end - 1)}`;
+  const ends = [...subtree(doc, p.item.id)].map((id) => at.get(id)?.show ?? p.show);
+  const e = Math.round(Math.max(p.show, ...ends) * 1e4) / 1e4;
+  // A night item ends on its check-out day; a day item on the day before its end.
+  const last = u === 'night' ? Math.floor(e) : Math.ceil(e) - 1;
+  return last > Math.floor(p.start) ? `${fmt(p.start)} – ${fmt(last)}` : fmt(p.start);
 }
+
+/**
+ * An item's total in words: "No price yet" for a stay or transport with
+ * no price, else the amount plus how many counted items inside have none.
+ * @param {App} app
+ * @param {Item} it
+ * @param {number} amount The total.
+ * @returns {string} HTML.
+ */
+function priceOf(app, it, amount) {
+  const { doc, optional } = app;
+  if (isUnpriced(it) && !kidsOf(doc, it.id).length) return 'No price yet';
+  const n = unpricedIn(doc, optional, it.id).length;
+  return `${money(amount, doc.currency)}${n ? ` + ${n} unpriced` : ''}`;
+}
+
+/**
+ * The item's note, kept as written (line breaks too).
+ * @param {Item} it
+ * @returns {string} HTML (empty with no note).
+ */
+const noteView = (it) => (it.note ? `<p class="sh-memo">${esc(it.note)}</p>` : '');
 
 /**
  * One cost line explained, e.g. "10 × $46 = $460".
@@ -185,7 +217,7 @@ function itemView(app, it) {
   const leaf = it.kind === 'item' && (isMoment(it) || typeOf(it) === 'event' || typeOf(it) === 'transport');
   const inside = it.kind === 'window' || (leaf && !kids.length) ? '' : `<div class="sh-sec"><div class="nb-h">${it.kind === 'group' ? 'Options (top one counts)' : 'Inside'}</div>${kids.length ? `<ol class="kids">${kids.map((k, i) => {
     const kp = /** @type {Placed} */ (at.get(k.id)), tag = it.kind === 'group' ? (i ? '' : 'pick') : k.kind === 'group' ? 'either/or' : k.committed ? '' : 'optional';
-    return `<li><button data-go="item:${esc(k.id)}"><span class="sw c-${k.color}"></span><b>${esc(k.name)}</b><small>${esc(datesOf(kp))}${tag ? ` · ${tag}` : ''}</small></button></li>`;
+    return `<li><button data-go="item:${esc(k.id)}"><span class="sw c-${k.color}"></span><b>${esc(k.name)}</b><small>${esc(datesOf(doc, at, kp))}${tag ? ` · ${tag}` : ''}</small></button></li>`;
   }).join('')}</ol>` : ''}<div class="sh-actions">${it.kind === 'group' ? `<button class="btn" data-go="add:item:${esc(it.id)}">+ Option</button>`
     : leaf ? '' : `<button class="btn" data-go="add:item:${esc(it.id)}">+ ${typeOf(it) === 'place' ? 'Stay' : 'Item'} inside</button><button class="btn" data-go="add:transport:${esc(it.id)}">+ Transport</button><button class="btn" data-go="add:event:${esc(it.id)}">+ Event</button><button class="btn" data-go="add:group:${esc(it.id)}">+ Either/or inside</button>`}${kids.length ? `<button class="btn" data-drill="${esc(it.id)}">Open on its own</button>` : ''}</div></div>`;
 
@@ -193,29 +225,31 @@ function itemView(app, it) {
     const left = Math.max(0, Math.ceil(p.end - nowIdx()));
     return {
       k: `Constraint · ${unitText(it.len ?? 1, 'day')}`, t: it.name, c: 'var(--ink)',
-      body: dl([['Dates', `${fmt(p.start)} – ${fmt(p.end - 1, { year: 'numeric' })}`], ['Leave by', fmt(p.end - 1, { weekday: 'short' })], ['Days left from today', String(Math.min(left, it.len ?? 1))]]) +
+      body: noteView(it) + dl([['Dates', p.end - 1 > p.start ? `${fmt(p.start)} – ${fmt(p.end - 1, { year: 'numeric' })}` : fmt(p.start, { year: 'numeric' })], ['Leave by', fmt(p.end - 1, { weekday: 'short' })], ['Days left from today', String(Math.min(left, it.len ?? 1))]]) +
         '<p class="sh-note">This never moves. Stays can stretch up to its last day.</p>' + actions,
     };
   }
 
-  const sum = total(doc, { optional, root: it.id, at });
+  const sum = total(doc, { optional, root: it.id, at }), who = whoOf(doc, it);
+  const forRow = /** @type {[string, string][]} */ (who ? [['For', esc(who)]] : []);
   if (it.kind === 'group') {
     return {
       k: `Either/or · ${kids.length} option${kids.length === 1 ? '' : 's'}`, t: it.name, c: 'var(--ink)',
-      body: dl([['Dates', esc(datesOf(p))], ['Pick', kids[0] ? esc(kids[0].name) : 'none yet'], ['Total', `${money(sum.stay + sum.travel, cur)}${live ? '' : ' (not counted)'}`]]) +
+      body: noteView(it) + dl([['Dates', esc(datesOf(doc, at, p))], ...forRow, ['Pick', kids[0] ? esc(kids[0].name) : 'none yet'], ['Total', `${priceOf(app, it, sum.stay + sum.travel)}${live ? '' : ' (not counted)'}`]]) +
         '<p class="sh-note">Only the top-ranked option counts toward totals. Drag options up or down, or use their Rank buttons.</p>' + inside + actions,
     };
   }
 
   const status = grouped ? (rank ? `Option ${rank + 1} in ${parent?.name}` : `Pick in ${parent?.name}`) : it.committed ? 'Committed' : 'Optional';
   const rows = /** @type {[string, string][]} */ ([
-    ['Dates', esc(datesOf(p))],
+    ['Dates', esc(datesOf(doc, at, p))],
+    ...forRow,
     ['Length', it.len === undefined && kids.length ? `${unitText(unitsOf(p), it.unit)} (fits what's inside)` : `${unitText(unitsOf(p), it.unit)}${isRanged(it) ? ` (${it.minLen}–${it.maxLen})` : ''}`],
     ...it.costs.map((l) => costRow(doc, l, p)),
   ]);
   const own = it.costs.reduce((t, l) => t + lineCost(doc, l, p), 0);
   if (kids.length) rows.push(['Inside', money(sum.stay + sum.travel - own, cur)]);
-  rows.push(['Total', `${money(sum.stay + sum.travel, cur)}${live ? '' : ' (not counted)'}`]);
+  rows.push(['Total', `${priceOf(app, it, sum.stay + sum.travel)}${live ? '' : ' (not counted)'}`]);
   const c = coverage(doc, at, optional).get(it.id), word = UNIT_WORDS[it.unit][1];
   const warn = (/** @type {[number, number][]} */ list, /** @type {string} */ cls, /** @type {string} */ what) => {
     const n = list.reduce((t, [a, b]) => t + b - a, 0);
@@ -231,7 +265,7 @@ function itemView(app, it) {
     : `<button class="btn" data-commit="${esc(it.id)}">${it.committed ? 'Mark optional' : 'Mark committed'}</button>`;
   return {
     k: `${typeWord(it)} · ${status}${isRanged(it) ? ` · ${it.minLen}–${unitText(it.maxLen, it.unit)}` : ''}`, t: it.name, c: `var(--c-${it.color})`,
-    body: dl(rows) + (c ? warn(c.gaps, 'gap', 'with nothing booked') + warn(c.overlaps, 'ovl', 'booked twice') : '')
+    body: noteView(it) + dl(rows) + (c ? warn(c.gaps, 'gap', 'with nothing booked') + warn(c.overlaps, 'ovl', 'booked twice') : '')
       + (c?.overlaps.length ? `<p class="sh-actions"><button class="btn" data-fixovl="${esc(it.id)}">Fix double booking</button></p>` : '') + moveWarn +
       `<div class="steps">${toggle}${it.len !== undefined ? `<button data-set="${esc(it.id)}:${it.len - step}" ${it.len <= mn ? 'disabled' : ''}>One ${UNIT_WORDS[it.unit][0]} shorter</button><button data-set="${esc(it.id)}:${it.len + step}" ${it.len >= mx ? 'disabled' : ''}>One ${UNIT_WORDS[it.unit][0]} longer</button>` : ''}${starts}</div>` +
       it.costs.filter((l) => l.type === 'date' && l.route).map((l) => nearby(doc, /** @type {string} */ (l.route), Math.floor(p.start))).join('') +
@@ -388,6 +422,8 @@ function formView(app, it, want, parentId) {
   ${input('Fewest (optional)', 'minLen', it?.minLen, 'type="number" min="0.25" step="any"', 'only-ranged')}
   ${input('Most (optional)', 'maxLen', it?.maxLen, 'type="number" min="0.25" step="any"', 'only-ranged')}
   <label class="check only-commit"><input type="checkbox" name="committed"${it?.committed === false ? '' : ' checked'}> Committed (counts in totals)</label>
+  ${input('Who', 'who', it?.who, 'type="text" maxlength="40" placeholder="Everyone" list="sh-people" autocomplete="off"', 'not-window')}
+  <datalist id="sh-people">${peopleOf(doc).map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
   ${select('Color', 'color', COLORS.map((c) => [c, c[0].toUpperCase() + c.slice(1)]), it?.color ?? (moment ? 'gray' : 'teal'), 'only-item')}
   <fieldset class="only-item costs"><legend>Costs</legend><div class="cost-rows">${costs.map((l) => costEditor(doc, l)).join('')}</div>
     <button type="button" class="btn" data-addcost>+ Add a cost</button></fieldset>
@@ -493,6 +529,10 @@ function saveItem(app, f) {
     if (Number.isNaN(dayOf(str('start')))) return 'Pick a start date.';
     it.start = str('start');
   } else if (!parent) return 'Pick a start date for top-level items.';
+  if (kind !== 'window') {
+    const who = str('who').slice(0, 40).trim();
+    if (who) it.who = who;
+  }
   if (starts !== 'date') it.offset = (str('offsetDir') === '-1' ? -1 : 1) * Math.abs(Math.round(numOrNaN('offset')) || 0);
   if (unit === 'hour' && !it.after) {
     const h = parseHhmm(str('at'));

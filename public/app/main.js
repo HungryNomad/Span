@@ -16,6 +16,7 @@ import {
   pivotOf, sampleDoc, total, unitText,
 } from './model.js';
 import { Lanes } from './lanes.js';
+import { beds, doubleRuns, gapRuns, nightsIn, unpricedIn } from './checks.js';
 import { missingMoves, pastWindows } from './places.js';
 import { RouteMap } from './routemap.js';
 import { Sheet } from './sheet.js';
@@ -262,9 +263,81 @@ async function boot() {
   }
 }
 
+/** Which issue in the summary is open to show its list, by kind. */
+let issueOpen = /** @type {string | null} */ (null);
+
+/**
+ * One problem the summary lists: a short chip, and the entries it opens to,
+ * each jumping to its dates (in Lanes) or selecting its item.
+ * @typedef {object} SumIssue
+ * @property {string} key
+ * @property {'gap' | 'ovl'} tone
+ * @property {string} label Chip text.
+ * @property {{text: string, a?: number, b?: number, sel?: string, fix?: string}[]} rows
+ */
+
+/**
+ * Night range as text: "Jan 8" for one night, "Dec 29 – Jan 3" for more
+ * (the morning you leave, as a booking reads).
+ * @param {number} a First night.
+ * @param {number} b Morning after the last.
+ * @returns {string}
+ */
+const nightsText = (a, b) => `${fmt(a)} – ${fmt(b)} · ${b - a} night${b - a === 1 ? '' : 's'}`;
+
+/**
+ * The plan's problems, worked out the same way every view counts them.
+ * @returns {SumIssue[]}
+ */
+function issuesOf() {
+  const { doc, optional } = app, at = layout(doc), bd = beds(doc, at, optional), out = /** @type {SumIssue[]} */ ([]);
+  const name = (/** @type {string} */ id) => byId(doc, id)?.name ?? '';
+  const whoText = (/** @type {string[]} */ who) => (who.length ? `${who.join(', ')}: ` : '');
+  const gaps = gapRuns(bd);
+  if (gaps.length) {
+    const n = nightsIn(gaps);
+    out.push({
+      key: 'gap', tone: 'gap', label: `${n} night${n === 1 ? '' : 's'} unbooked`,
+      rows: gaps.map((g) => ({ text: `${whoText(g.who)}${nightsText(g.a, g.b)}${g.ids.length ? ` · ${g.ids.map(name).join(', ')}` : ''}`, a: g.a, b: g.b, sel: g.ids[0] && `item:${g.ids[0]}` })),
+    });
+  }
+  // Nights booked twice in what you've picked, named; Fix when the stays sit side by side in one place.
+  const cov = coverage(doc, at, optional), dbl = doubleRuns(bd);
+  if (dbl.length) {
+    const n = nightsIn(dbl);
+    out.push({
+      key: 'dbl', tone: 'ovl', label: `${n} night${n === 1 ? '' : 's'} booked twice`,
+      rows: dbl.map((r) => {
+        const its = r.ids.map((id) => byId(doc, id)), par = its[0]?.parent;
+        const fix = par && its.every((it) => it?.parent === par) && cov.get(par)?.overlaps.length ? par : undefined;
+        return { text: `${whoText(r.who)}${r.ids.map(name).join(' and ')} · ${nightsText(r.a, r.b)}`, a: r.a, b: r.b, sel: `item:${r.ids[1] ?? r.ids[0]}`, fix };
+      }),
+    });
+  }
+  // Inside a trip you haven't picked, a night booked twice is still worth fixing before you pick it.
+  for (const [id, c] of cov) {
+    const it = byId(doc, id);
+    if (!it || isPicked(doc, it) || !c.overlaps.length) continue;
+    const trip = ([it, ...ancestors(doc, it)].find((a) => byId(doc, a.parent)?.kind === 'group') ?? it).name, n = c.overlaps.reduce((t, [a, b]) => t + b - a, 0);
+    out.push({ key: `ovl:${id}`, tone: 'ovl', label: `${n} booked twice in ${trip}`, rows: c.overlaps.map(([a, b]) => ({ text: `${it.name} · ${nightsText(a, b)}`, a, b, sel: `item:${id}`, fix: id })) });
+  }
+  for (const w of pastWindows(doc, optional)) {
+    out.push({ key: `win:${w.item.id}`, tone: 'gap', label: w.item.name, rows: [{ text: `${w.text}${w.trip ? ` (${w.trip})` : ''}`, sel: `item:${w.item.id}` }] });
+  }
+  const miss = missingMoves(doc, at, optional);
+  if (miss.length) {
+    out.push({
+      key: 'move', tone: 'gap', label: `${miss.length} move${miss.length === 1 ? '' : 's'} not booked`,
+      rows: miss.map((m) => ({ text: `${m.from} to ${m.to} · ${fmt(m.day)}`, a: m.day, b: m.day + 1, sel: `item:${m.stay.id}` })),
+    });
+  }
+  return out;
+}
+
 /**
  * Summary line: when you leave the pivot and how much of its window is
- * left, the plan (or drilled item) total, and booking warnings.
+ * left, the plan (or drilled item) total with how many items have no price
+ * yet, and the plan's problems as chips that open a list of where each is.
  * @returns {string} HTML.
  */
 function summary() {
@@ -283,26 +356,22 @@ function summary() {
     out += `<span class="sum-main"><span class="mono">Leave ${esc(pivot.name)}</span><b>${fmt(p.end, { weekday: 'short' })}</b><span>${unitText(pivot.len ?? 1, pivot.unit)}${spare}</span></span>`;
   }
   if (filter !== 'none') {
-    const root = drill ? byId(doc, drill) : undefined, sum = total(doc, { optional, root: root?.id, at });
-    out += `<span class="sum-opt">${root ? esc(root.name) : 'Plan total'} <b>${money(pick(sum, filter), cur)}</b></span>`;
+    const root = drill ? byId(doc, drill) : undefined, sum = total(doc, { optional, root: root?.id, at }), np = unpricedIn(doc, optional, root?.id).length;
+    out += `<span class="sum-opt">${root ? esc(root.name) : 'Plan total'} <b>${money(pick(sum, filter), cur)}</b>${np ? `<small title="Stays or moves with no price yet, left out of the total">+ ${np} unpriced</small>` : ''}</span>`;
   }
-  // Gaps only in what you've picked (a gap in a trip you didn't pick isn't one to fill); a night booked twice anywhere.
-  const all = [...coverage(doc, at, optional)];
-  const cov = all.filter(([id]) => { const it = byId(doc, id); return it && isPicked(doc, it); });
-  const gaps = cov.filter(([, c]) => c.gaps.length), ovl = all.filter(([, c]) => c.overlaps.length);
-  const nights = (/** @type {[string, {gaps: [number, number][], overlaps: [number, number][]}][]} */ list, /** @type {'gaps' | 'overlaps'} */ k) =>
-    list.reduce((t, [, c]) => t + c[k].reduce((n, [a, b]) => n + b - a, 0), 0);
-  if (gaps.length) out += `<button class="sum-warn gap" data-sel="item:${esc(gaps[0][0])}">${nights(gaps, 'gaps')} unbooked</button>`;
-  for (const [id] of ovl) {
-    const it = /** @type {import('./model.js').Item} */ (byId(doc, id)), n = nights([[id, /** @type {any} */ (all.find(([k]) => k === id))[1]]], 'overlaps');
-    const trip = isPicked(doc, it) ? '' : ` in ${esc(([it, ...ancestors(doc, it)].find((a) => byId(doc, a.parent)?.kind === 'group') ?? it).name)}`;
-    out += `<span class="sum-pair"><button class="sum-warn ovl" data-sel="item:${esc(id)}">${n} double-booked${trip}</button><button class="sum-fix" data-fix="${esc(id)}">Fix</button></span>`;
+  const issues = issuesOf();
+  if (issueOpen && !issues.some((i) => i.key === issueOpen)) issueOpen = null;
+  if (issues.length) {
+    out += `<span class="sum-issues">${issues.map((i) => `<button class="sum-warn ${i.tone}" data-iss="${esc(i.key)}" aria-expanded="${issueOpen === i.key}" title="${esc(i.label)}">${esc(i.label)}</button>`).join('')}</span>`;
   }
-  for (const w of pastWindows(doc, optional)) out += `<button class="sum-warn gap" data-sel="item:${esc(w.item.id)}">${esc(w.text)}${w.trip ? ` (${esc(w.trip)})` : ''}</button>`;
-  const miss = missingMoves(doc, at, optional);
-  if (miss.length) out += `<button class="sum-warn gap" data-sel="item:${esc(miss[0].stay.id)}" title="${esc(miss.map((m) => `${m.from} → ${m.to}`).join(', '))}">${miss.length} move${miss.length === 1 ? '' : 's'} missing</button>`;
   const tag = { all: 'stays + travel', stays: 'stays only', travel: 'travel only', none: 'costs hidden' }[filter];
-  return out + `<span class="sum-tag">${tag}${optional && filter !== 'none' ? ', optional in' : ''}</span>`;
+  out += `<span class="sum-tag">${tag}${optional && filter !== 'none' ? ', optional in' : ''}</span>`;
+  const shown = issues.find((i) => i.key === issueOpen);
+  if (shown) {
+    out += `<ul class="sum-list">${shown.rows.map((r) =>
+      `<li><button class="sum-go" ${r.a !== undefined ? `data-go="${r.a},${r.b}"` : ''} ${r.sel ? `data-sel="${esc(r.sel)}"` : ''}>${esc(r.text)}</button>${r.fix ? `<button class="sum-fix" data-fix="${esc(r.fix)}">Fix</button>` : ''}</li>`).join('')}</ul>`;
+  }
+  return out;
 }
 
 /** Draws the controls, summary, and every view. */
@@ -394,8 +463,15 @@ $('#people').addEventListener('change', (e) => {
 $('#add').addEventListener('click', () => app.select(`add:item:${app.drill ?? ''}`));
 $('#summary').addEventListener('click', (e) => {
   const d = /** @type {HTMLElement} */ (e.target).closest('button')?.dataset;
-  if (d?.fix) { const id = d.fix; app.change((doc) => { fixOverlaps(doc, id, app.optional); }); }
-  else if (d?.sel) app.select(d.sel);
+  if (!d) return;
+  if (d.fix) { const id = d.fix; app.change((doc) => { fixOverlaps(doc, id, app.optional); }); }
+  else if (d.iss) { issueOpen = issueOpen === d.iss ? null : d.iss; renderAll(); }
+  else if (d.go && app.view === 'lanes') {
+    // In Lanes, jump to the dates and light them up; the item opens too, when there is one.
+    const [a, b] = d.go.split(',').map(Number);
+    if (d.sel) app.select(d.sel);
+    lanes.focus(a, b);
+  } else if (d.sel) app.select(d.sel);
 });
 $('#toast-undo').addEventListener('click', () => {
   if (!undo) return;

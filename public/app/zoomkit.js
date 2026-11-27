@@ -33,6 +33,8 @@ export const PPD_MAX = 24 * 96;
 /** Zoom presets: visible span in days. */
 export const PRESETS = { Hours: 1, Days: 9, Weeks: 42, Months: 124, Year: 365 };
 /** @typedef {keyof typeof PRESETS} Preset */
+/** The extra preset that fits the whole plan in view; it isn't a fixed span, so the axis reads at {@link levelOf} the span it shows. */
+export const FIT = 'Fit';
 
 /**
  * The zoom level a visible span reads as: the preset nearest to it on a log scale.
@@ -115,7 +117,7 @@ export function axisTicks(a, b, ppd, level) {
  * @returns {string} HTML.
  */
 export const zoomControls = () =>
-  `<div class="seg" data-zp role="group" aria-label="Zoom presets">${Object.keys(PRESETS).map((p) => `<button data-p="${p}">${p}</button>`).join('')}</div>
+  `<div class="seg" data-zp role="group" aria-label="Zoom presets"><button data-p="${FIT}" title="Fit the whole plan">${FIT}</button>${Object.keys(PRESETS).map((p) => `<button data-p="${p}">${p}</button>`).join('')}</div>
   <label class="zoom"><span class="mono" aria-hidden="true">−</span><input data-zs type="range" min="0" max="1000" aria-label="Zoom level"><span class="mono" aria-hidden="true">+</span></label>`;
 
 /**
@@ -210,7 +212,7 @@ export function axisMarks(a, b, ppd, x, left, level, gx = 0) {
 /**
  * Presses the button of the zoom level in view.
  * @param {HTMLElement} group The presets group.
- * @param {Preset} level
+ * @param {Preset | typeof FIT} level `Fit` while the whole plan is fitted.
  */
 export function markPreset(group, level) {
   group.querySelectorAll('button').forEach((btn) => btn.setAttribute('aria-pressed', String(btn.dataset.p === level)));

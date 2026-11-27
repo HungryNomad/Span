@@ -48,12 +48,12 @@ import { ancestors, byId, counted, isPicked, kidsOf, typeOf } from './model.js';
  * @property {string[]} ids For a double booking, the stays booked twice; for a gap, the unbooked stays covering it.
  */
 
-/** A leading "Name: " on an item, as in "Kaylee: Tokyo". */
+/** A leading "Name: " on an item, as in "Sam: Tokyo". */
 const LEAD = /^(\p{Lu}[\p{Ll}'-]+):\s/u;
 
 /**
  * People named by the plan's structure: siblings whose names lead with two
- * or more different first names ("Kaylee: Tokyo" beside "Loren: Berlin").
+ * or more different first names ("Sam: Tokyo" beside "Alex: Berlin").
  * A lone "Trip: …" lead is a label, not a person.
  * @param {PlanDoc} doc
  * @returns {Map<string, string>} Person by item id.
@@ -120,7 +120,8 @@ export function nightRange(doc, at) {
  * Where each person sleeps each night of the plan. A stay counts when it's
  * picked (or in no either/or group) and booked (committed, or any stay when
  * `optional` is set); unbooked picked stays are kept as `maybe`, so a gap
- * can name its placeholder. A stay holding other stays defers to them.
+ * can name its placeholder. A stay holding other stays defers to them, and a
+ * place with nights and nothing inside counts as a stay.
  * @param {PlanDoc} doc
  * @param {Layout} at
  * @param {boolean} optional
@@ -130,12 +131,14 @@ export function beds(doc, at, optional) {
   const range = nightRange(doc, at);
   if (!range) return null;
   const [a, b] = range, leads = namedLeads(doc);
-  const isStay = (/** @type {Item} */ it) => it.kind === 'item' && it.unit === 'night' && typeOf(it) === 'stay';
+  // A place with nights and nothing inside it is a stay too (a city typed as a place, with no hotel named yet).
+  const isStay = (/** @type {Item} */ it) => it.kind === 'item' && it.unit === 'night'
+    && (typeOf(it) === 'stay' || (typeOf(it) === 'place' && !kidsOf(doc, it.id).length));
   const stays = doc.items.filter((it) => isStay(it) && isPicked(doc, it) && !kidsOf(doc, it.id).some(isStay))
     .map((it) => ({ it, p: /** @type {import('./model.js').Placed} */ (at.get(it.id)), who: whoOf(doc, it, leads), booked: it.committed || optional }));
   const people = peopleOf(doc), whos = people.length ? people : [null];
   // Parts of the plan for one person only (a week in Tokyo), to say where they are.
-  const own = doc.items.filter((it) => it.kind === 'item' && it.unit !== 'hour' && typeOf(it) !== 'stay' && typeOf(it) !== 'transport' && isPicked(doc, it))
+  const own = doc.items.filter((it) => it.kind === 'item' && it.unit !== 'hour' && !isStay(it) && typeOf(it) !== 'stay' && typeOf(it) !== 'transport' && isPicked(doc, it))
     .map((it) => ({ it, p: /** @type {import('./model.js').Placed} */ (at.get(it.id)), who: whoOf(doc, it, leads) })).filter((o) => o.who);
   const lines = whos.map((who) => {
     const mine = stays.filter((s) => !s.who || s.who === who);

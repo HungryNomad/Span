@@ -24,13 +24,18 @@
       <div class="planbar">
         <label class="sr" for="plan">Plan</label>
         <select id="plan" aria-label="Plan"></select>
-        <button class="btn" id="plan-new" title="New plan">New</button>
-        <button class="btn" id="plan-sample" title="Add a sample plan that hasn't decided between Thailand and Taiwan">+ Sample</button>
-        <button class="btn" id="plan-rename" title="Rename this plan">Rename</button>
-        <button class="btn" id="plan-delete" title="Delete this plan">Delete</button>
+        <details class="planmenu" id="planmenu">
+          <summary class="btn" aria-label="Plan menu">⋯</summary>
+          <div class="planmenu-in">
+            <button class="btn" id="plan-new" title="New plan">New</button>
+            <button class="btn" id="plan-sample" title="Add a sample plan that hasn't decided between Thailand and Taiwan">+ Sample</button>
+            <button class="btn" id="plan-rename" title="Rename this plan">Rename</button>
+            <button class="btn" id="plan-delete" title="Delete this plan">Delete</button>
+            <button class="btn theme-btn" id="theme" aria-pressed="false"></button>
+          </div>
+        </details>
         <span class="status" id="status" role="status" aria-live="polite"></span>
       </div>
-      <button class="btn theme-btn" id="theme" aria-pressed="false"></button>
     </header>
 
     <section class="controls" aria-label="Plan controls">
