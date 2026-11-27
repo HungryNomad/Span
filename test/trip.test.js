@@ -54,3 +54,28 @@ test('night stays without a length stretch over their nights, not a flight home'
   const doc = T.decidingSample(), at = M.layout(doc), th = /** @type {M.Placed} */ (at.get('th'));
   assert.equal(th.end - th.start, 25);
 });
+
+test('a change of city with nothing booked between is a missing move', () => {
+  const doc = M.normalize({ v: 2, items: [
+    { id: 'vn', name: 'Vietnam', start: '2026-11-01' },
+    { id: 'han', name: 'Hanoi flat', parent: 'vn', len: 5 },
+    { id: 'han2', name: 'Old Quarter hotel, Hanoi', parent: 'vn', offset: 5, len: 2 },
+    { id: 'hoi', name: 'Hoi An homestay', parent: 'vn', offset: 7, len: 4 },
+    { id: 'x', name: 'Somewhere', parent: 'vn', offset: 11, len: 2 },
+  ] });
+  const miss = P.missingMoves(doc, M.layout(doc), false);
+  assert.deepEqual(miss.map((m) => [m.from, m.to, m.stay.id]), [['Hanoi', 'Hoi An', 'hoi']], 'same city needs nothing; an unknown place is not flagged');
+  assert.equal(P.moveParent(doc, M.byId(doc, 'hoi') ?? doc.items[0]), 'vn');
+  doc.items.push(M.makeItem({ id: 't', name: 'Hanoi → Da Nang', type: 'transport', unit: 'hour', start: '2026-11-08', at: 10, len: 1.5, parent: 'vn' }));
+  assert.equal(P.missingMoves(doc, M.layout(doc), false).length, 0, 'a booked move clears it');
+  const deciding = T.decidingSample();
+  assert.equal(P.missingMoves(deciding, M.layout(deciding), false).length, 0);
+});
+
+test('events are not moves', () => {
+  const doc = T.decidingSample();
+  doc.items.push(M.makeItem({ id: 'ev', name: 'Muay Thai night', type: 'event', unit: 'hour', parent: 'th', offset: 3, at: 19, len: 3 }));
+  const at = M.layout(doc);
+  assert.ok(!T.hops(doc, at, false).some((h) => h.item.id === 'ev'));
+  assert.equal(M.byId(doc, 'tw-train')?.mode, 'train');
+});

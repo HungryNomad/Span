@@ -9,7 +9,7 @@
  * @module
  */
 import {
-  ancestors, byId, counted, dayOf, itemCost, kidsOf, layout, makeItem, normalize, pick, routeLabel, setRank, total,
+  ancestors, byId, counted, dayOf, itemCost, kidsOf, layout, makeItem, normalize, pick, routeLabel, setRank, total, typeOf,
 } from './model.js';
 
 /** @typedef {import('./model.js').PlanDoc} PlanDoc */
@@ -19,10 +19,10 @@ import {
 /** @typedef {import('./model.js').CostFilter} CostFilter */
 
 /**
- * A move between places: an hour-long item (a flight or train) or a stay's
+ * A move between places: a transport item (a flight or train) or a stay's
  * fare-priced "getting here" line.
  * @typedef {object} Hop
- * @property {Item} item The hour item, or the stay it brings you to.
+ * @property {Item} item The transport item, or the stay it brings you to.
  * @property {number} at Departure as a fractional day index.
  * @property {number} hours Duration.
  * @property {string} label e.g. "SGN → BKK" or the item's name.
@@ -124,7 +124,7 @@ export function costRange(doc, id, { optional, filter, at = layout(doc) }) {
 export function sleeps(doc, at, optional) {
   const c = counted(doc, optional);
   /** A stay counted by the night. */
-  const nightly = (/** @type {Item} */ it) => it.kind === 'item' && it.unit === 'night';
+  const nightly = (/** @type {Item} */ it) => it.kind === 'item' && it.unit === 'night' && typeOf(it) !== 'transport' && typeOf(it) !== 'event';
   const inner = new Set();
   for (const it of doc.items) if (c.has(it.id) && nightly(it)) for (const a of ancestors(doc, it)) inner.add(a.id);
   return doc.items.filter((it) => c.has(it.id) && nightly(it) && !inner.has(it.id))
@@ -150,7 +150,7 @@ export function hops(doc, at, optional) {
   for (const it of doc.items) {
     if (!c.has(it.id) || it.kind !== 'item') continue;
     const p = /** @type {Placed} */ (at.get(it.id));
-    if (it.unit === 'hour') {
+    if (typeOf(it) === 'transport') {
       const m = HOP_CODES.exec(it.name) ?? HOP_NAME.exec(it.name);
       const cost = itemCost(doc, p);
       out.push({ item: it, at: p.start, hours: (p.end - p.start) * 24, label: it.name, from: m?.[1], to: m?.[2], cost: cost.stay + cost.travel });
@@ -228,7 +228,7 @@ export function decidingSample() {
   hop('tw-vj', 'VietJet SGN → TPE', 'tw-in', 23 + 40 / 60, 3.4, 120, { note: 'Red-eye: a night on the plane.' });
   stay('tw-tpe', 'Taipei', 'tw', 15, 'blue', [
     ['tw-daan', "Da'an apartment", 70, 'https://www.airbnb.com/'], ['tw-zs', 'Zhongshan hotel', 85, 'https://www.agoda.com/']]);
-  hop('tw-train', 'Taipei → Tainan', 'tw', 10 + 10 / 60, 1.8, 45, { after: 'tw-tpe' });
+  hop('tw-train', 'Taipei → Tainan', 'tw', 10 + 10 / 60, 1.8, 45, { after: 'tw-tpe', mode: 'train' });
   stay('tw-tnn', 'Tainan', 'tw', 10, 'blue', [
     ['tw-old', 'Old town house', 55, 'https://www.airbnb.com/'], ['tw-anp', 'Anping hotel', 62, 'https://www.booking.com/']], { after: 'tw-tpe' });
   hop('tw-home', 'KHH → SGN', 'tw', 12 + 5 / 60, 2.5, 150, { after: 'tw-tnn' });

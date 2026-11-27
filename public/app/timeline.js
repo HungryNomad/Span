@@ -65,7 +65,7 @@ function monthStarts(a, b, step = 1) {
  * @param {number} ppd Pixels per day.
  * @returns {{k: string, n: number, minor: [number, string][], major: [number, string][]}}
  */
-function axisTicks(a, b, ppd) {
+export function axisTicks(a, b, ppd) {
   const [k, n] = UNITS.find(([u, c]) => SPAN[u] * c * ppd >= 58) ?? UNITS[UNITS.length - 1];
   /** @type {[number, string][]} */
   const minor = [];
