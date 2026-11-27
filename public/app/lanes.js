@@ -17,7 +17,7 @@ import {
   siteOf, typeOf, unitsOf, unitText,
 } from './model.js';
 import { missingMoves } from './places.js';
-import { axisMarks, fromSlider, markPreset, PPD_MAX, PRESETS, toSlider, wireZoom, zoomControls } from './zoomkit.js';
+import { axisMarks, fromSlider, levelOf, markPreset, PPD_MAX, PRESETS, toSlider, wireZoom, zoomControls } from './zoomkit.js';
 import { costRange, forkOf, isFork, rateOf, totalIfPicked, valueOf } from './trip.js';
 import { drag, esc } from './ui.js';
 
@@ -33,8 +33,10 @@ const ROW = 36, LINE = 28;
 const FIT_MIN = 9, FIT_MAX = 24;
 /** Days in view when fully zoomed out, at least (as in the zoom timeline). */
 const MIN_SPAN = 400;
-/** Narrowest bubble that gets drag handles on its ends. */
+/** Bubbles narrower than this keep their drag handles just outside their ends. */
 const HANDLES_MIN = 30;
+/** Bubbles narrower than this show a shortened name (the full text is on hover). */
+const SHORT_MIN = 64;
 
 /**
  * Icon for a moment on the line: the transport's mode, or a diamond for an event.
@@ -42,6 +44,27 @@ const HANDLES_MIN = 30;
  * @returns {string}
  */
 export const iconOf = (it) => (typeOf(it) === 'transport' ? MODES[it.mode ?? 'other'][1] : '◆');
+
+/**
+ * Undoes {@link esc}, so text can be measured and cut.
+ * @param {string} s HTML-escaped text.
+ * @returns {string}
+ */
+const unesc = (s) => s.replace(/&(amp|lt|gt|quot|#39);/g, (_, /** @type {string} */ e) => /** @type {Record<string, string>} */ ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[e] ?? _);
+
+/**
+ * As much of a bubble's name as fits in `w` pixels: the part before " · ",
+ * after any "Trip: " lead and move icons, cut without an ellipsis (which
+ * would leave room for nothing else).
+ * @param {string} text The bubble's plain text.
+ * @param {number} w Bubble width in pixels.
+ * @returns {string} Empty when not even two letters fit.
+ */
+export function shortName(text, w) {
+  const name = (text.split(' · ')[0].split(': ').pop() ?? '').replace(/^[^\p{L}\p{N}]+/u, '');
+  const fit = Math.floor((w - 8) / 6.6);
+  return fit >= 2 ? [...name].slice(0, fit).join('').trimEnd() : '';
+}
 
 /**
  * Reads a value from localStorage, tolerating private mode.
@@ -86,10 +109,10 @@ export class Lanes {
     this.open = /** @type {Set<string> | null} */ (null);
     /** `fit` (fit the plan, as when it first opens) or pixels per day. */
     this.zoom = /** @type {'fit' | number} */ ('fit');
-    /** Preset picked last, until you zoom by hand. */
-    this.active = /** @type {string | null} */ (null);
-    /** Geometry of the last render: first and last day, pixels per day, label width, and the most zoomed out. */
-    this.geo = { d0: 0, d1: 1, ppd: FIT_MAX, L: 214, min: 1 };
+    /** Preset picked last, until you zoom by hand. It keeps its span when the window resizes. */
+    this.active = /** @type {import('./zoomkit.js').Preset | null} */ (null);
+    /** Geometry of the last render: first and last day, pixels per day, label width, the most zoomed out, and the track's width. */
+    this.geo = { d0: 0, d1: 1, ppd: FIT_MAX, L: 214, min: 1, vw: 0 };
     /** Day to keep at a pixel of the track on the next render (after a zoom). */
     this.keep = /** @type {{day: number, ax: number} | null} */ (null);
     /** Pending zoom frame, so a pinch draws at most once per frame. */
@@ -255,31 +278,42 @@ export class Lanes {
     const was = this.geo;
     this.geo = { ...was, L };
     const vw = this.view(), avail = vw - TAIL - 4, min = vw / Math.max(MIN_SPAN, d1 - d0);
+    // After a resize, a preset keeps its span around the same middle day, so the button, slider and axis still agree.
+    if (this.active && was.vw && vw !== was.vw && !this.keep) {
+      this.keep = { day: (this.sc.scrollLeft + was.vw / 2) / was.ppd + was.d0, ax: vw / 2 };
+      this.zoom = vw / PRESETS[this.active];
+    }
     const ppd = this.zoom === 'fit' ? clamp(clamp(avail / (d1 - d0), FIT_MIN, FIT_MAX), min, PPD_MAX) : clamp(this.zoom, min, PPD_MAX);
     // Where the view was, as a day at the track's left edge, so a redraw doesn't jump and a zoom keeps its anchor.
     const left = this.keep ? this.keep.day - this.keep.ax / ppd : this.sc.scrollLeft / was.ppd + was.d0;
     d1 = Math.max(d1, d0 + Math.ceil(vw / ppd));
     const W = Math.ceil((d1 - d0) * ppd) + TAIL;
-    /** Handles on a bubble's ends, when its item can stretch. */
-    const ends = (/** @type {Item} */ it, /** @type {number} */ a, /** @type {number} */ b) =>
-      (b - a) * ppd >= HANDLES_MIN && canStretch(doc, it)
+    /** Handles on a bubble's ends, when its item can stretch (a narrow bubble's sit just outside it, see `.tiny`). */
+    const ends = (/** @type {Item} */ it, /** @type {number} */ a) =>
+      canStretch(doc, it)
         ? `${a >= d0 ? `<i class="ln-h s" data-edge="${esc(it.id)}" data-side="start" title="Drag to change the start"></i>` : ''}<i class="ln-h e" data-edge="${esc(it.id)}" data-side="end" title="Drag to change the end"></i>`
         : '';
     /** Pixel offset of a day in the track. */
     const x = (/** @type {number} */ d) => (d - d0) * ppd;
 
-    /** A bubble from day a to b; `edge` is the item its end handles stretch. */
+    /**
+     * A bubble from day a to b; `edge` is the item its end handles stretch.
+     * Too narrow for its text, it shows as much of the name as fits, with
+     * the full text on hover.
+     */
     const pill = (/** @type {number} */ a, /** @type {number} */ b, /** @type {string} */ color, /** @type {string} */ text, cls = '', attrs = '', top = 6, /** @type {Item | null} */ edge = null) => {
-      const l = Math.max(x(a), 0) + 1, r = Math.min(x(b), x(d1)) - 1;
-      return `<button class="ln-p ${cls}" style="left:${l}px;width:${Math.max(r - l, 8)}px;top:${top}px;--c:var(--c-${color})" ${attrs}><span>${text}</span>${edge ? ends(edge, a, b) : ''}</button>`;
+      const l = Math.max(x(a), 0) + 1, r = Math.min(x(b), x(d1)) - 1, w = Math.max(r - l, 8);
+      const plain = unesc(text.replace(/<em>/g, ' ').replace(/<[^>]*>/g, '')), tiny = w < HANDLES_MIN ? ' tiny' : '';
+      const shown = w < SHORT_MIN ? esc(shortName(plain, w)) : text;
+      return `<button class="ln-p ${cls}${tiny}${w < SHORT_MIN ? ' short' : ''}" style="left:${l}px;width:${w}px;top:${top}px;--c:var(--c-${color})" title="${esc(plain)}" ${attrs}><span>${shown}</span>${edge ? ends(edge, a) : ''}</button>`;
     };
     /** A transport or event tag: at a moment, or as wide as it lasts when zoomed in enough. */
     const flight = (/** @type {Item} */ it, /** @type {string} */ text, cls = '', attrs = '', top = 7) => {
       const p = P(it.id), w = (p.end - p.start) * ppd, ev = typeOf(it) === 'event' ? ' ev' : '';
       return `<button class="ln-fl ${cls}${ev}${w >= 56 ? ' long' : ''}" style="left:${x(p.start)}px;top:${top}px${w >= 56 ? `;width:${w}px` : ''}" ${attrs}>${iconOf(it)} <span>${text}</span></button>`;
     };
-    /** A small icon on the line where a move (✈ by default) or event happens. */
-    const dot = (/** @type {number} */ d, /** @type {number} */ top, icon = '✈') => `<i class="ln-dot" style="left:${x(d)}px;top:${top}px">${icon}</i>`;
+    /** A small icon on the line where a move or event happens. */
+    const dot = (/** @type {number} */ d, /** @type {number} */ top, /** @type {string} */ icon) => `<i class="ln-dot" style="left:${x(d)}px;top:${top}px">${icon}</i>`;
     /** A red mark where you change place with nothing booked to get there. */
     const missMark = (/** @type {typeof miss[number]} */ m, /** @type {number} */ top) =>
       `<button class="ln-miss" style="left:${x(m.day)}px;top:${top}px" data-sel="item:${esc(m.stay.id)}" title="No transport from ${esc(m.from)} to ${esc(m.to)}" aria-label="No transport from ${esc(m.from)} to ${esc(m.to)}">!</button>`;
@@ -321,27 +355,32 @@ export class Lanes {
       }
       if (isHop(it)) return flight(it, esc(it.name), '', `data-sel="item:${esc(it.id)}"`, top + 1);
       const has = kidsOf(doc, it.id).length > 0;
-      return pill(p.start, p.end, it.color, `${lead}${esc(it.name)} · ${nightsTxt(it)}`, `${cls}${typeOf(it) === 'event' ? ' ev' : ''}`, has ? `data-tg="${esc(it.id)}"` : `data-sel="item:${esc(it.id)}"`, top, it)
-        + (arrival(it) ? dot(p.start, top + (sm ? 1 : 3)) : '');
+      return pill(p.start, p.end, it.color, `${lead}${arrival(it) ? '✈ ' : ''}${esc(it.name)} · ${nightsTxt(it)}`, `${cls}${typeOf(it) === 'event' ? ' ev' : ''}`, has ? `data-tg="${esc(it.id)}"` : `data-sel="item:${esc(it.id)}"`, top, it);
     };
 
     /**
-     * An item's children as one chain of bubbles in time order.
+     * An item's children as one chain of bubbles in time order. A move
+     * shows as its icon at the start of the bubble it leads to (so it never
+     * covers a name), or on the line when nothing follows it.
      * @param {Item} it @param {number} top @param {boolean} sm @param {string} lead
      */
     const chain = (it, top, sm, lead) => {
       const ks = kidsOf(doc, it.id).filter((k) => k.kind !== 'window').sort((a, b) => P(a.id).start - P(b.id).start);
       if (!ks.length) return bubble(it, top, sm, lead);
-      let first = true, h = '';
+      let first = true, h = '', icons = '';
+      /** @type {Item | undefined} */
+      let hop;
       for (const k of ks) {
         const pk = k.kind === 'group' ? kidsOf(doc, k.id)[0] : k;
-        if (pk && isHop(pk)) { h += dot(P(pk.id).start, top + (sm ? 1 : 3), iconOf(pk)); continue; }
-        const one = k.kind === 'group' || !kidsOf(doc, k.id).length ? bubble(k, top, sm, first ? lead : '', true)
-          : pill(P(k.id).start, P(k.id).end, k.color, `${first ? lead : ''}${esc(k.name)} · ${nightsTxt(k)}`, `${sm ? 'sm' : ''}`, `data-tg="${esc(it.id)}"`, top, k);
-        h += one;
+        if (pk && isHop(pk)) { icons += `${iconOf(pk)} `; hop ??= pk; continue; }
+        const pre = `${first ? lead : ''}${icons}`;
+        h += k.kind === 'group' || !kidsOf(doc, k.id).length ? bubble(k, top, sm, pre, true)
+          : pill(P(k.id).start, P(k.id).end, k.color, `${pre}${esc(k.name)} · ${nightsTxt(k)}`, `${sm ? 'sm' : ''}`, `data-tg="${esc(it.id)}"`, top, k);
         first = false;
+        icons = '';
+        hop = undefined;
       }
-      return h;
+      return hop ? h + dot(P(hop.id).start, top + (sm ? 1 : 3), iconOf(hop)) : h;
     };
 
     /** @type {Row[]} */
@@ -416,8 +455,7 @@ export class Lanes {
           const dl = v - val(kidsOf(doc, group.id)[0].id);
           text = `${site ? `${esc(site)} · ` : ''}${r !== undefined && !hide ? `${money(r, cur)}${unit}` : esc(it.name)}${hide ? '' : picked ? ` · ${money(v, cur)}` : dl ? ` · ${dl > 0 ? '+' : '−'}${money(Math.abs(dl), cur)}` : ''}`;
         } else if (r !== undefined && !hide) text += ` · ${money(r, cur)}${unit}`;
-        trk += pill(p.start, p.end, it.color, text, `${picked ? '' : 'ghost'} ${it.committed ? '' : 'opt'}${typeOf(it) === 'event' ? ' ev' : ''}`, `data-sel="item:${esc(it.id)}"`, 6, it)
-          + (arrival(it) ? dot(p.start, 9) : '');
+        trk += pill(p.start, p.end, it.color, `${arrival(it) ? '✈ ' : ''}${text}`, `${picked ? '' : 'ghost'} ${it.committed ? '' : 'opt'}${typeOf(it) === 'event' ? ' ev' : ''}`, `data-sel="item:${esc(it.id)}"`, 6, it);
       }
       rows.push({ dep, h, lab, trk, tint: dep ? tint : undefined });
       if (!isOpen) return;
@@ -437,7 +475,7 @@ export class Lanes {
   ${rows.map((r) => `<div class="ln-row d${Math.min(r.dep, 3)}" style="height:${r.h}px${r.tint ? `;--t:var(--c-${r.tint})` : ''}"><div class="ln-lab" style="--dep:${r.dep}">${r.lab}</div><div class="ln-trk" style="width:${W}px">${r.trk}</div></div>`).join('')}
 </div>`;
     if (this.drawn) this.sc.scrollLeft = (left - d0) * ppd;
-    this.geo = { d0, d1, ppd, L, min };
+    this.geo = { d0, d1, ppd, L, min, vw };
     this.keep = null;
     this.drawn = true;
     this.drawAxis();
@@ -450,11 +488,12 @@ export class Lanes {
     if (!axt || !shade || !label) return;
     const a = Math.max(d0, sl / ppd + d0 - 1), b = Math.min(d1, (sl + w) / ppd + d0 + 1);
     const x = (/** @type {number} */ d) => (d - d0) * ppd;
-    const { axis, grid, scale } = axisMarks(a, b, ppd, x, sl, L);
+    const level = this.active ?? levelOf(w / ppd);
+    const { axis, grid } = axisMarks(a, b, ppd, x, sl, level, L);
     const today = nowIdx();
     axt.innerHTML = axis;
     shade.innerHTML = grid + (today >= a && today <= b ? `<i class="today" style="left:${L + x(today)}px"></i>` : '');
-    label.textContent = scale;
-    markPreset(this.pre, this.active, scale);
+    label.textContent = level;
+    markPreset(this.pre, level);
   }
 }
