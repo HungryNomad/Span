@@ -12,7 +12,7 @@ import { Cards } from './cards.js';
 import { Compare } from './compare.js';
 import { prepare } from './images.js';
 import {
-  byId, clamp, coverage, emptyDoc, fmt, isRanged, kidsOf, layout, MAX_IMAGES, money, normalize, pick, pivotOf, sampleDoc,
+  byId, clamp, coverage, emptyDoc, fmt, isPicked, isRanged, kidsOf, layout, MAX_IMAGES, money, normalize, pick, pivotOf, sampleDoc,
   total, unitText,
 } from './model.js';
 import { Lanes } from './lanes.js';
@@ -254,8 +254,9 @@ function summary() {
     const root = drill ? byId(doc, drill) : undefined, sum = total(doc, { optional, root: root?.id, at });
     out += `<span class="sum-opt">${root ? esc(root.name) : 'Plan total'} <b>${money(pick(sum, filter), cur)}</b></span>`;
   }
-  const cov = coverage(doc, at, optional);
-  const count = (/** @type {'gaps' | 'overlaps'} */ k) => [...cov].filter(([, c]) => c[k].length);
+  // Only the options you've picked: a gap inside a trip you didn't pick isn't one you have to fill.
+  const cov = [...coverage(doc, at, optional)].filter(([id]) => { const it = byId(doc, id); return it && isPicked(doc, it); });
+  const count = (/** @type {'gaps' | 'overlaps'} */ k) => cov.filter(([, c]) => c[k].length);
   const gaps = count('gaps'), ovl = count('overlaps');
   const nights = (/** @type {[string, {gaps: [number, number][], overlaps: [number, number][]}][]} */ list, /** @type {'gaps' | 'overlaps'} */ k) =>
     list.reduce((t, [, c]) => t + c[k].reduce((n, [a, b]) => n + b - a, 0), 0);

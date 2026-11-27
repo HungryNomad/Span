@@ -321,6 +321,21 @@ export function ancestors(doc, it) {
 }
 
 /**
+ * Whether an item is part of the plan as picked: it and each of its
+ * ancestors is the pick (first option) of any either/or group it's in.
+ * @param {PlanDoc} doc
+ * @param {Item} it
+ * @returns {boolean}
+ */
+export function isPicked(doc, it) {
+  for (const a of [it, ...ancestors(doc, it)]) {
+    const parent = byId(doc, a.parent);
+    if (parent?.kind === 'group' && kidsOf(doc, parent.id)[0] !== a) return false;
+  }
+  return true;
+}
+
+/**
  * Resolves every item to calendar days.
  * @param {PlanDoc} doc
  * @param {Record<string, number>} [over] Lengths to use instead of the stored ones, by id.

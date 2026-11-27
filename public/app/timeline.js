@@ -12,7 +12,7 @@ import {
   layout, money, nowIdx, pivotOf, rangeOf, routeLabel, setRank, total, unitText, UNIT_DAYS,
 } from './model.js';
 import { $, drag, esc, heat, PLANE } from './ui.js';
-import { axisMarks, fromSlider, markPreset, PPD_MAX, PRESETS, toSlider, wireZoom, zoomControls } from './zoomkit.js';
+import { axisMarks, fromSlider, levelOf, markPreset, PPD_MAX, PRESETS, toSlider, wireZoom, zoomControls } from './zoomkit.js';
 
 export { axisTicks } from './zoomkit.js';
 
@@ -153,7 +153,9 @@ export class Timeline {
     /** When true, the next render with a measurable width jumps to the Months preset. */
     this.fresh = true;
     /** Preset picked last, until you zoom by hand. */
-    this.active = /** @type {string | null} */ (null);
+    this.active = /** @type {import('./zoomkit.js').Preset | null} */ (null);
+    /** Scroller width at the last render, to notice a resize. */
+    this.vw = 0;
     this.wire(el);
   }
 
@@ -380,7 +382,11 @@ export class Timeline {
     const { doc, filter, sel, optional, drill } = this.app;
     const at = layout(doc), today = nowIdx(), cov = coverage(doc, at, optional), live = counted(doc, optional);
     const showStay = filter === 'all' || filter === 'stays', showTravel = filter === 'all' || filter === 'travel';
+    // A preset keeps its span when the window resizes, around the same middle day.
+    const vw = this.sc.clientWidth, mid = this.active && this.vw && vw && vw !== this.vw ? (this.sc.scrollLeft + this.vw / 2) / this.ppd + this.d0 : undefined;
+    if (vw) this.vw = vw;
     const shift = this.updateRange();
+    if (mid !== undefined && this.active) this.ppd = vw / PRESETS[this.active];
     this.ppd = this.ppd ? clamp(this.ppd, this.ppdMin(), PPD_MAX) : this.ppdMin();
     const p = this.ppd, x = (/** @type {number} */ i) => this.x(i);
 
@@ -496,7 +502,8 @@ export class Timeline {
     }
     h += `<div class="today" style="left:${x(today)}px"></div>`;
     this.bars.innerHTML = h;
-    if (shift) this.sc.scrollLeft += shift;
+    if (mid !== undefined) this.sc.scrollLeft = this.x(mid) - vw / 2;
+    else if (shift) this.sc.scrollLeft += shift;
     this.drawAxis();
   }
 
@@ -505,13 +512,14 @@ export class Timeline {
     const p = this.ppd, sl = this.sc.scrollLeft, w = this.w();
     if (!p) return;
     const a = Math.max(this.d0, sl / p + this.d0 - 1), b = Math.min(this.d1, (sl + w) / p + this.d0 + 1);
-    const { axis, grid, scale } = axisMarks(a, b, p, (i) => this.x(i), sl);
+    const level = this.active ?? levelOf(w / p);
+    const { axis, grid } = axisMarks(a, b, p, (i) => this.x(i), sl, level);
     let gr = grid;
     for (let r = 1; r <= this.rows.length; r++) gr += `<i class="hl" style="top:${r * ROW}px"></i>`;
     this.axis.innerHTML = axis;
     this.grid.innerHTML = gr;
     const label = document.getElementById('g-scale');
-    if (label) label.textContent = scale;
-    markPreset(this.pre, this.active, scale);
+    if (label) label.textContent = level;
+    markPreset(this.pre, level);
   }
 }

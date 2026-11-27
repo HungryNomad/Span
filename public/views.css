@@ -57,6 +57,12 @@
 .ln-h::after { content: ''; position: absolute; top: 5px; bottom: 5px; left: 5px; width: 2px; border-radius: 1px; background: currentColor; opacity: 0; transition: opacity .15s; }
 .ln-p:hover .ln-h::after { opacity: .7; }
 @media (pointer: coarse) { .ln-h { width: 16px; } .ln-h::after { left: 7px; opacity: .45; } }
+/* A narrow bubble: a short name with less padding, and its handles just outside its ends so it can still be dragged. */
+.ln-p.short { padding: 0 4px; }
+.ln-p.tiny { overflow: visible; }
+.ln-p.tiny .ln-h.s { left: auto; right: 100%; }
+.ln-p.tiny .ln-h.e { right: auto; left: 100%; }
+.ln-p.tiny .ln-h::after { background: var(--c); opacity: .6; }
 .ln-tip { position: fixed; z-index: 50; transform: translateX(-50%); padding: 4px 9px; border-radius: 6px; background: var(--ink); color: var(--surface); font: 500 12px var(--f-mono); white-space: nowrap; pointer-events: none; }
 .ln-miss { position: absolute; z-index: 3; transform: translateX(-50%); width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--surface); background: var(--danger); color: #fff; font: 700 12px/16px var(--f-mono); padding: 0; cursor: pointer; }
 .ln-miss-k { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: var(--danger); color: #fff; font: 700 11px/16px var(--f-mono); text-align: center; }
@@ -84,6 +90,7 @@
 @media (max-width: 640px) {
   .ln-lab small { display: none; }
   .ln-all { margin-left: 0; }
+  .ln-tools .zoom { flex-basis: 100%; max-width: none; }
 }
 
 /* Calendar */
