@@ -31,6 +31,16 @@ test('fixOverlaps shortens the earlier of two overlapping stays', () => {
   assert.ok(at.get('tw-tpe').end <= at.get('tw-tnn').start + 1e-9);
 });
 
+test('a pick that starts before its group counts as double booked, and Fix moves it back in', () => {
+  const doc = T.decidingSample(), old = M.byId(doc, 'tw-old');
+  old.offset = -1; old.len = 11;
+  assert.deepEqual(M.coverage(doc, M.layout(doc), false).get('tw')?.overlaps.length, 1);
+  assert.ok(M.fixOverlaps(doc, 'tw', false));
+  assert.equal(old.offset, 0);
+  assert.equal(old.len, 10);
+  assert.equal(M.coverage(doc, M.layout(doc), false).get('tw'), undefined);
+});
+
 test('insertItem keeps siblings in date order', () => {
   const doc = M.normalize({ v: 2, items: [
     { id: 'a', kind: 'item', name: 'A', start: '2026-03-01', unit: 'night', len: 2, committed: true, costs: [] },

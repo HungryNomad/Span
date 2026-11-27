@@ -329,7 +329,9 @@ function renderAll() {
   $('#optional').setAttribute('aria-pressed', String(optional));
   const people = /** @type {HTMLInputElement} */ ($('#people'));
   if (document.activeElement !== people) people.value = loaded ? String(doc.people) : '';
-  $('#more-sum').textContent = `Costs: ${{ all: 'all', stays: 'stays', travel: 'travel', none: 'hidden' }[filter]}${optional ? ' + optional' : ''} · ${doc.people} ${doc.people === 1 ? 'person' : 'people'}`;
+  $('#more-sum').textContent = loaded
+    ? `Costs: ${{ all: 'all', stays: 'stays', travel: 'travel', none: 'hidden' }[filter]}${optional ? ' + optional' : ''} · ${doc.people} ${doc.people === 1 ? 'person' : 'people'}`
+    : 'Costs and people';
 
   $('#summary').innerHTML = empty || !loaded ? '' : summary();
   if (!empty && loaded) view.render();

@@ -493,7 +493,7 @@ export function coverage(doc, at, optional) {
     const spans = kidsOf(doc, it.id)
       .filter((k) => (k.kind === 'group' ? kidsOf(doc, k.id)[0]?.unit === it.unit && !isMoment(kidsOf(doc, k.id)[0])
         : k.kind === 'item' && k.unit === it.unit && !isMoment(k) && typeOf(k) !== 'event' && (k.committed || optional)))
-      .map((k) => /** @type {Placed} */ (at.get(k.id)));
+      .map((k) => /** @type {Placed} */ (at.get(k.kind === 'group' ? kidsOf(doc, k.id)[0].id : k.id)));
     if (!spans.length) continue;
     const p = /** @type {Placed} */ (at.get(it.id)), a = Math.floor(p.start);
     // A night parent stretched by an hour-long child (a flight home) ends mid-day: that day's night isn't part of it.
@@ -672,8 +672,10 @@ function roomFor(doc, it, p, fallback) {
 /**
  * Removes the nights an item's children book twice: each stay that runs
  * into the next one is shortened to end when the next begins, or, when it
- * can't be shortened, the next one starts later. Only children of the same
- * unit count, as in {@link coverage}.
+ * can't be shortened, the next one starts later. A group's pick that starts
+ * before its group (and so before the stay it follows ends) is moved back
+ * in, keeping its end. Only children of the same unit count, as in
+ * {@link coverage}.
  * @param {PlanDoc} doc Mutated in place.
  * @param {string} id The item whose children overlap.
  * @param {boolean} optional Count optional children too.
@@ -687,11 +689,23 @@ export function fixOverlaps(doc, id, optional) {
     const spans = kidsOf(doc, id).filter((k) => {
       const b = k.kind === 'group' ? kidsOf(doc, k.id)[0] : k;
       return k.kind !== 'window' && b?.kind === 'item' && b.unit === it.unit && !isMoment(b) && typeOf(b) !== 'event' && (k.kind === 'group' || k.committed || optional);
-    }).map((k) => /** @type {Placed} */ (at.get(k.id))).sort((a, b) => a.start - b.start);
-    const i = spans.findIndex((a, j) => j > 0 && spans[j - 1].end > a.start + 1e-9);
+    }).map((k) => {
+      const slot = /** @type {Placed} */ (at.get(k.id));
+      const pk = k.kind === 'group' ? kidsOf(doc, k.id)[0] : undefined;
+      return { slot, p: pk ? /** @type {Placed} */ (at.get(pk.id)) : slot };
+    }).sort((a, b) => a.p.start - b.p.start);
+    const i = spans.findIndex((a, j) => j > 0 && spans[j - 1].p.end > a.p.start + 1e-9);
     if (i < 0) return changed;
     const a = spans[i - 1], b = spans[i];
-    const moved = setEdge(doc, a.item.id, 'end', b.start) || setEdge(doc, b.item.id, 'start', a.end);
+    const pk = b.p.item, shift = Math.min(Math.ceil(a.p.end) - Math.floor(b.p.start), (pk.len ?? 1) - 1);
+    if (pk !== b.slot.item && b.p.start < b.slot.start && !pk.start && !pk.after && shift > 0) {
+      pk.offset += shift;
+      pk.len = /** @type {number} */ (pk.len) - shift;
+      if (isRanged(pk)) pk.minLen = Math.min(pk.minLen, pk.len);
+      changed = true;
+      continue;
+    }
+    const moved = setEdge(doc, a.slot.item.id, 'end', b.p.start) || setEdge(doc, b.slot.item.id, 'start', a.p.end);
     if (!moved) return changed;
     changed = true;
   }
