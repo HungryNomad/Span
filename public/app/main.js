@@ -7,14 +7,20 @@
  * @module
  */
 import * as api from './api.js';
+import { Calendar } from './calendar.js';
+import { Cards } from './cards.js';
 import { Compare } from './compare.js';
 import { prepare } from './images.js';
 import {
   byId, clamp, coverage, emptyDoc, fmt, isRanged, kidsOf, layout, MAX_IMAGES, money, normalize, pick, pivotOf, sampleDoc,
   total, unitText,
 } from './model.js';
+import { Lanes } from './lanes.js';
+import { RouteMap } from './routemap.js';
 import { Sheet } from './sheet.js';
+import { Story } from './story.js';
 import { Timeline } from './timeline.js';
+import { decidingSample } from './trip.js';
 import { $, esc } from './ui.js';
 
 /** @typedef {import('./model.js').CostFilter} CostFilter */
@@ -22,6 +28,10 @@ import { $, esc } from './ui.js';
 
 /** Name given to the plan created on first visit. */
 const SAMPLE_NAME = 'After Vietnam (sample)';
+/** Name of the still-deciding sample plan the Sample button makes. */
+const DECIDING_NAME = 'Thailand or Taiwan (sample)';
+/** The views, by id: lanes is the main one; zoom is the original timeline with the cost panel. */
+const VIEWS = /** @type {const} */ (['lanes', 'calendar', 'map', 'cards', 'story', 'zoom']);
 /** Delay before saving after the last change, in ms. */
 const SAVE_DELAY = 700;
 /** Below this width, children open by drilling in rather than in place. */
@@ -60,6 +70,9 @@ const app = {
   open: new Set(),
   drill: null,
   narrow: NARROW.matches,
+  view: VIEWS.find((v) => v === load('span-view')) ?? 'lanes',
+  planId: null,
+  planName: '',
   change(fn) {
     fn(app.doc);
     renderAll();
@@ -101,6 +114,20 @@ const app = {
 const timeline = new Timeline($('#timeline'), app);
 const compare = new Compare($('#compare'), app);
 const sheet = new Sheet($('#sheet'), app);
+const lanes = new Lanes($('#lanes'), app);
+/** Each view's container and how to draw it; zoom draws the timeline and the cost panel. */
+const views = {
+  lanes: { els: ['#lanes'], render: () => lanes.render() },
+  calendar: { els: ['#calendar'], render: () => calendar.render() },
+  map: { els: ['#routemap'], render: () => routemap.render() },
+  cards: { els: ['#cards'], render: () => cards.render() },
+  story: { els: ['#story'], render: () => story.render() },
+  zoom: { els: ['#timeline', '#compare'], render: () => { timeline.render(); compare.render(); } },
+};
+const calendar = new Calendar($('#calendar'), app);
+const routemap = new RouteMap($('#routemap'), app);
+const cards = new Cards($('#cards'), app);
+const story = new Story($('#story'), app);
 
 /**
  * Shows save/load state next to the plan picker.
@@ -155,7 +182,10 @@ function show(body) {
   let saved = null;
   try { saved = JSON.parse(load(`span-open:${planId}`) ?? 'null'); } catch { /* ignore */ }
   app.open = new Set(Array.isArray(saved) ? saved : app.doc.items.filter((it) => kidsOf(app.doc, it.id).length).map((it) => it.id));
+  app.planId = planId;
+  app.planName = plans.find((p) => p.id === planId)?.name ?? '';
   timeline.reset();
+  lanes.reset();
 }
 
 /**
@@ -237,10 +267,10 @@ function summary() {
 /** Draws the controls, summary, and every view. */
 function renderAll() {
   const { doc, filter, optional } = app, at = layout(doc), pivot = pivotOf(doc);
-  const empty = !doc.items.length;
+  const empty = !doc.items.length, view = views[app.view];
   $('#empty').hidden = !empty;
-  $('#timeline').hidden = empty;
-  $('#compare').hidden = empty;
+  for (const v of Object.values(views)) for (const sel of v.els) $(sel).hidden = empty || v !== view;
+  document.querySelectorAll('#views button').forEach((b) => b.setAttribute('aria-pressed', String(/** @type {HTMLElement} */ (b).dataset.v === app.view)));
 
   // Length slider for the pivot, when it has a range.
   const ranged = pivot && isRanged(pivot) ? pivot : null;
@@ -260,10 +290,7 @@ function renderAll() {
   if (document.activeElement !== people) people.value = String(doc.people);
 
   $('#summary').innerHTML = empty ? '' : summary();
-  if (!empty) {
-    timeline.render();
-    compare.render();
-  }
+  if (!empty) view.render();
   sheet.render();
 }
 
@@ -329,6 +356,18 @@ $('#empty').addEventListener('click', (e) => {
   const act = /** @type {HTMLElement} */ (e.target).closest('button')?.dataset.act;
   if (act === 'add') app.select('add:item:');
   if (act === 'sample') app.change((doc) => Object.assign(doc, sampleDoc()));
+  if (act === 'deciding') app.change((doc) => Object.assign(doc, decidingSample()));
+});
+
+$('#views').addEventListener('click', (e) => {
+  const v = VIEWS.find((x) => x === /** @type {HTMLElement} */ (e.target).closest('button')?.dataset.v);
+  if (!v || v === app.view) return;
+  app.view = v;
+  store('span-view', v);
+  renderAll();
+});
+$('#plan-sample').addEventListener('click', async () => {
+  try { await create(DECIDING_NAME, decidingSample()); } catch (err) { status(`Couldn't create: ${/** @type {Error} */ (err).message}`, true); }
 });
 
 $('#plan').addEventListener('change', (e) => {
@@ -346,7 +385,9 @@ $('#plan-rename').addEventListener('click', async () => {
   try {
     await api.updatePlan(rec.id, { name: name.slice(0, 200) });
     rec.name = name.slice(0, 200);
+    app.planName = rec.name;
     renderPicker();
+    renderAll();
   } catch (err) { status(`Couldn't rename: ${/** @type {Error} */ (err).message}`, true); }
 });
 $('#plan-delete').addEventListener('click', async () => {

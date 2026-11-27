@@ -339,10 +339,22 @@ export function layout(doc, over = {}, fallback = Math.floor(nowIdx())) {
     const ch = kids.get(it.id) ?? [], len = over[it.id] ?? it.len;
     const e = it.kind === 'group' ? (ch.length ? endOf(ch[0]) : s)
       : len !== undefined ? s + len * UNIT_DAYS[it.unit]
-      : ch.length ? Math.max(s, ...ch.map(endOf))
+      : ch.length ? Math.max(s, ...stretchers(it, ch).map(endOf))
       : s + UNIT_DAYS[it.unit];
     E.set(it.id, e);
     return e;
+  };
+
+  /**
+   * Children a parent with no length stretches over. A night or day parent
+   * ignores hour-long children (a flight home on the last day), so it stays
+   * a whole number of nights; they draw past its end.
+   * @param {Item} it @param {Item[]} ch @returns {Item[]}
+   */
+  const stretchers = (it, ch) => {
+    if (it.unit === 'hour') return ch;
+    const whole = ch.filter((k) => k.unit !== 'hour' && !(k.kind === 'group' && (kids.get(k.id) ?? []).every((o) => o.unit === 'hour')));
+    return whole.length ? whole : ch;
   };
 
   /** @type {Layout} */
@@ -441,10 +453,12 @@ export function coverage(doc, at, optional) {
   for (const it of doc.items) {
     if (it.kind !== 'item' || it.unit === 'hour') continue;
     const spans = kidsOf(doc, it.id)
-      .filter((k) => (k.kind === 'group' ? kidsOf(doc, k.id).length > 0 : k.kind === 'item' && k.unit === it.unit && (k.committed || optional)))
+      .filter((k) => (k.kind === 'group' ? kidsOf(doc, k.id)[0]?.unit === it.unit : k.kind === 'item' && k.unit === it.unit && (k.committed || optional)))
       .map((k) => /** @type {Placed} */ (at.get(k.id)));
     if (!spans.length) continue;
-    const p = /** @type {Placed} */ (at.get(it.id)), a = Math.floor(p.start), b = Math.min(Math.ceil(p.end), a + 3000);
+    const p = /** @type {Placed} */ (at.get(it.id)), a = Math.floor(p.start);
+    // A night parent stretched by an hour-long child (a flight home) ends mid-day: that day's night isn't part of it.
+    const b = Math.min(it.unit === 'night' ? Math.floor(p.end) : Math.ceil(p.end), a + 3000);
     /** @type {[number, number][]} */
     const gaps = [];
     /** @type {[number, number][]} */

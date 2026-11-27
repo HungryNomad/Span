@@ -2,10 +2,12 @@
 
 A planner on a zoomable timeline (hours to years), for a long trip or a weekend: items nest inside items, either/or groups hold options, and costs add up as you go. Runs as a single Cloudflare Worker: static UI from `public/`, a JSON API in `src/worker.ts`, plans stored in D1 and pictures in R2.
 
-UI mockups live in [`docs/mockups.html`](docs/mockups.html) (open it locally in a browser). The app is the "Zoom timeline" direction with the "Compare plans" chart as its cost panel.
+UI mockups live in [`docs/mockups.html`](docs/mockups.html) (open it locally in a browser). The main view is **Lanes** (sketch 16: rounded bubbles on a day grid, built for a plan that hasn't decided where to go next). The other views read the same plan: **Calendar**, **Map**, **Cards** and **Story**, plus **Zoom**, the original zoom timeline with the "Compare plans" chart as its cost panel.
 
 ## Using it
 
+- **Views:** pick one under the summary (it's remembered). **Lanes** shows one row per item. A closed row shows what's inside as a chain of bubbles; an either/or group shows its pick as a stacked "deck"; a *fork* (a group whose options are whole trips, like "Thailand or Taiwan") shows one chain per trip with each trip's plan total. Open a row with its arrow or a bubble; tap an option's number to make it the pick. The buttons at the top are the trips you're choosing between, with the plan total for each. **Calendar** puts the picked trip on month grids; **Map** draws it between known cities (stays named after a city, like "Hoi An homestay", or flights with airport codes), with the other trips dashed and a day slider; **Cards** is a phone-first stack with rivals one tap away; **Story** tells it as chapters with boarding-pass stubs.
+- **+ Sample** adds a plan that hasn't decided between Thailand and Taiwan after Saigon, each with flights in, room options and a flight home.
 - **Items** hold items: a country holds rooms, a Saturday holds lunch and a gig. Each is measured in nights, days or hours, starts on a date, when its parent starts (plus some days), or right after another item. Leave the length empty to stretch it over what's inside. A *fixed window* (visa, lease) never moves.
 - **Either/or groups** hold options; only the top-ranked one counts. Drag an option up or down (long-press first on a phone) or use its Rank buttons. Outside groups, rank is just lane order.
 - **Committed or optional:** only committed items count toward totals, unless **Count optional** is on.
@@ -25,8 +27,11 @@ UI mockups live in [`docs/mockups.html`](docs/mockups.html) (open it locally in 
 | `migrations/` | D1 schema (`0001_plans.sql`: one JSON document per plan) |
 | `public/` | Static UI: `index.html`, `styles.css`, and plain ES modules in `app/` (no build step) |
 | `public/app/model.js` | Plan document (v2) and v1 upgrade, layout of nested and chained items, counting, cost math, coverage, sample plan (pure, unit-tested) |
+| `public/app/trip.js` | Forks, totals as if an option were picked, price ranges, where you sleep, flights, and the still-deciding sample (pure, unit-tested) |
+| `public/app/places.js` | Built-in city table, place names for items, the trip as stops (pure, unit-tested) |
+| `public/app/lanes.js` | Lanes view (main); `calendar.js`, `routemap.js`, `cards.js`, `story.js` the other views; `timeline.js` + `compare.js` the Zoom view; styles for the new views in `public/views.css` |
 | `public/app/images.js` | Resizes pictures in the browser before upload |
-| `test/` | `node --test` unit tests for the model |
+| `test/` | `node --test` unit tests for the model, trips and places |
 | `docs/mockups.html` | The UI directions (mockups) |
 
 ## API
