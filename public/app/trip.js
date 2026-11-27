@@ -9,7 +9,7 @@
  * @module
  */
 import {
-  ancestors, byId, counted, dayOf, itemCost, kidsOf, layout, makeItem, normalize, pick, routeLabel, setRank, total, typeOf,
+  ancestors, byId, counted, dayOf, itemCost, kidsOf, layout, makeItem, money, normalize, pick, routeLabel, setRank, total, typeOf, unitsOf,
 } from './model.js';
 
 /** @typedef {import('./model.js').PlanDoc} PlanDoc */
@@ -79,6 +79,31 @@ export const valueOf = (doc, id, { optional, filter, at }) => pick(total(doc, { 
  * @returns {number}
  */
 export const totalIfPicked = (doc, id, { optional, filter }) => pick(total(withPick(doc, id), { optional }), filter);
+
+/**
+ * How an option compares with the pick of its group, as short text: the
+ * difference in what it adds ("+$40"), or, when the two last a different
+ * number of nights (or days), the difference per night and the option's
+ * length ("8n · −$5/night"), so a shorter stay doesn't look cheaper only
+ * for being shorter.
+ * @param {PlanDoc} doc
+ * @param {string} id The option.
+ * @param {string} pickId The group's pick.
+ * @param {{optional: boolean, filter: CostFilter, at?: Layout}} o
+ * @returns {string} Empty when costs are hidden, the option is the pick, or there's no difference.
+ */
+export function rivalDelta(doc, id, pickId, o) {
+  if (o.filter === 'none' || id === pickId) return '';
+  const at = o.at ?? layout(doc), a = at.get(id), b = at.get(pickId);
+  if (!a || !b) return '';
+  const va = valueOf(doc, id, { ...o, at }), vb = valueOf(doc, pickId, { ...o, at });
+  const na = unitsOf(a), nb = unitsOf(b), cur = doc.currency;
+  /** A signed amount. */
+  const signed = (/** @type {number} */ d) => `${d > 0 ? '+' : '−'}${money(Math.abs(d), cur)}`;
+  if (na === nb || a.item.unit === 'hour' || !na || !nb) return va === vb ? '' : signed(va - vb);
+  const d = Math.round(va / na - vb / nb), unit = a.item.unit === 'night' ? 'night' : 'day';
+  return `${+na.toFixed(2)}${unit[0]} vs ${+nb.toFixed(2)}${unit[0]}${d ? ` · ${signed(d)}/${unit}` : ''}`;
+}
 
 /**
  * Cheapest and dearest an item can come to over every pick still open
@@ -173,6 +198,21 @@ export function hops(doc, at, optional) {
  * @returns {number | undefined}
  */
 export const rateOf = (it) => it.costs.find((l) => l.type === 'per' && !l.pp)?.amount ?? it.costs.find((l) => l.type === 'per')?.amount;
+
+/**
+ * Every per-night (or per-day) cost of an item in one phrase, with
+ * per-person lines multiplied out: "$38 room + $44 daily spend a night".
+ * @param {PlanDoc} doc
+ * @param {Item} it
+ * @returns {string} Empty when it has no per-night costs.
+ */
+export function ratesText(doc, it) {
+  const lines = it.costs.filter((l) => l.type === 'per');
+  if (!lines.length) return '';
+  const unit = it.unit === 'night' ? 'night' : it.unit === 'day' ? 'day' : 'hour';
+  const parts = lines.map((l) => `${money(l.amount * (l.pp ? doc.people : 1), doc.currency)}${lines.length > 1 && l.label ? ` ${l.label.toLowerCase()}` : ''}`);
+  return `${parts.join(' + ')} a ${unit}`;
+}
 
 /**
  * A plan that hasn't decided where to go after Saigon: Thailand or Taiwan,

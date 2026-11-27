@@ -39,15 +39,20 @@
         <input id="stay" type="range" step="1">
         <output id="stay-out" for="stay"></output>
       </div>
-      <div class="chips" id="filter" role="group" aria-label="Which costs to show">
-        <span class="lbl">Costs</span>
-        <button class="chip" data-f="all">All</button>
-        <button class="chip" data-f="stays">Stays</button>
-        <button class="chip" data-f="travel">Travel</button>
-        <button class="chip" data-f="none">Hide</button>
-        <button class="chip" id="optional" title="Include optional items in totals">Count optional</button>
-      </div>
-      <label class="people">People <input id="people" type="number" min="1" max="99" step="1" inputmode="numeric"></label>
+      <details class="more" id="more">
+        <summary id="more-sum">Costs and people</summary>
+        <div class="more-in">
+          <div class="chips" id="filter" role="group" aria-label="Which costs to show">
+            <span class="lbl">Costs</span>
+            <button class="chip" data-f="all">All</button>
+            <button class="chip" data-f="stays">Stays</button>
+            <button class="chip" data-f="travel">Travel</button>
+            <button class="chip" data-f="none">Hide</button>
+            <button class="chip" id="optional" title="Include optional items in totals">Count optional</button>
+          </div>
+          <label class="people">People <input id="people" type="number" min="1" max="99" step="1" inputmode="numeric"></label>
+        </div>
+      </details>
       <button class="btn primary" id="add">+ Add</button>
     </section>
     <section class="summary" id="summary" aria-live="polite"></section>
@@ -76,6 +81,8 @@
       <section class="compare" id="compare" aria-label="Cost by plan" hidden></section>
     </main>
   </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-t"></span><button id="toast-undo">Undo</button></div>
 
   <aside class="sheet" id="sheet" role="dialog" aria-labelledby="sh-t" hidden>
     <div class="sh-head">

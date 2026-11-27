@@ -10,9 +10,10 @@ import * as api from './api.js';
 import {
   anchorOf, ancestors, byId, canStretch, COLORS, counted, coverage, dateOf, dayOf, fareOn, fmt, hhmm, inGroup, isLink, isoOf, isRanged,
   kidsOf, layout, lineCost, makeItem, MAX_IMAGES, MAX_LINKS, modeOf, MODES, money, nowIdx, parseHhmm, pruneRoutes, removeItem, routeKey,
-  routeLabel, setEdge, setRank, siteOf, subtree, total, TYPES, typeOf, uid, unitText, unitsOf, UNIT_WORDS,
+  routeLabel, setEdge, setRank, siteOf, subtree, total, TYPES, typeOf, uid, unitText, unitsOf, UNIT_WORDS, insertItem, isMoment, fixOverlaps,
 } from './model.js';
-import { missingMoves, moveParent } from './places.js';
+import { missingMoves, moveParent, pastWindows } from './places.js';
+import { forkOf } from './trip.js';
 import { $, esc, heat } from './ui.js';
 
 /** @typedef {import('./ui.js').App} App */
@@ -177,15 +178,16 @@ function itemView(app, it) {
   const { doc, optional } = app, cur = doc.currency, at = layout(doc), p = /** @type {Placed} */ (at.get(it.id));
   const kids = kidsOf(doc, it.id), sibs = kidsOf(doc, it.parent), rank = sibs.indexOf(it), parent = byId(doc, it.parent);
   const grouped = inGroup(doc, it), live = counted(doc, optional).has(it.id);
-  const rankBtns = sibs.length > 1
+  const rankBtns = grouped && sibs.length > 1
     ? `<button class="btn" data-rank="${esc(it.id)}:${rank - 1}" ${rank === 0 ? 'disabled' : ''}>↑ Rank up</button><button class="btn" data-rank="${esc(it.id)}:${rank + 1}" ${rank === sibs.length - 1 ? 'disabled' : ''}>↓ Rank down</button>`
     : '';
   const actions = `<div class="sh-actions">${rankBtns}<span class="spacer"></span><button class="btn" data-go="edit:${esc(it.id)}">Edit</button><button class="btn danger" data-delete="${esc(it.id)}">Delete</button></div>`;
-  const inside = it.kind === 'window' ? '' : `<div class="sh-sec"><div class="nb-h">${it.kind === 'group' ? 'Options (top one counts)' : 'Inside'}</div>${kids.length ? `<ol class="kids">${kids.map((k, i) => {
+  const leaf = it.kind === 'item' && (isMoment(it) || typeOf(it) === 'event' || typeOf(it) === 'transport');
+  const inside = it.kind === 'window' || (leaf && !kids.length) ? '' : `<div class="sh-sec"><div class="nb-h">${it.kind === 'group' ? 'Options (top one counts)' : 'Inside'}</div>${kids.length ? `<ol class="kids">${kids.map((k, i) => {
     const kp = /** @type {Placed} */ (at.get(k.id)), tag = it.kind === 'group' ? (i ? '' : 'pick') : k.kind === 'group' ? 'either/or' : k.committed ? '' : 'optional';
     return `<li><button data-go="item:${esc(k.id)}"><span class="sw c-${k.color}"></span><b>${esc(k.name)}</b><small>${esc(datesOf(kp))}${tag ? ` · ${tag}` : ''}</small></button></li>`;
   }).join('')}</ol>` : ''}<div class="sh-actions">${it.kind === 'group' ? `<button class="btn" data-go="add:item:${esc(it.id)}">+ Option</button>`
-    : `<button class="btn" data-go="add:item:${esc(it.id)}">+ ${typeOf(it) === 'place' ? 'Stay' : 'Item'} inside</button><button class="btn" data-go="add:transport:${esc(it.id)}">+ Transport</button><button class="btn" data-go="add:event:${esc(it.id)}">+ Event</button><button class="btn" data-go="add:group:${esc(it.id)}">+ Either/or inside</button>`}${kids.length ? `<button class="btn" data-drill="${esc(it.id)}">Open on its own</button>` : ''}</div></div>`;
+    : leaf ? '' : `<button class="btn" data-go="add:item:${esc(it.id)}">+ ${typeOf(it) === 'place' ? 'Stay' : 'Item'} inside</button><button class="btn" data-go="add:transport:${esc(it.id)}">+ Transport</button><button class="btn" data-go="add:event:${esc(it.id)}">+ Event</button><button class="btn" data-go="add:group:${esc(it.id)}">+ Either/or inside</button>`}${kids.length ? `<button class="btn" data-drill="${esc(it.id)}">Open on its own</button>` : ''}</div></div>`;
 
   if (it.kind === 'window') {
     const left = Math.max(0, Math.ceil(p.end - nowIdx()));
@@ -221,14 +223,16 @@ function itemView(app, it) {
   };
   const step = it.unit === 'hour' ? 0.25 : 1, [mn, mx] = isRanged(it) ? [it.minLen, it.maxLen] : [step, Infinity];
   const miss = missingMoves(doc, at, optional).find((m) => m.stay.id === it.id);
-  const moveWarn = miss ? `<p class="warn gap">No transport from ${esc(miss.from)} to ${esc(miss.to)}. <button class="btn" data-addmove="${esc(it.id)}">+ Add transport</button></p>` : '';
+  const moveWarn = (miss ? `<p class="warn gap">No transport from ${esc(miss.from)} to ${esc(miss.to)}. <button class="btn" data-addmove="${esc(it.id)}">+ Add transport</button></p>` : '')
+    + pastWindows(doc, optional).filter((w) => w.item.id === it.id).map((w) => `<p class="warn gap">${esc(w.text)}.</p>`).join('');
   const starts = canStretch(doc, it) ? `<button data-edgestep="${esc(it.id)}:-1">Start a day earlier</button><button data-edgestep="${esc(it.id)}:1" ${(it.len ?? 1) <= 1 ? 'disabled' : ''}>Start a day later</button>` : '';
   const toggle = grouped
     ? (rank ? `<button class="btn primary" data-rank="${esc(it.id)}:0">Make this the pick</button>` : '')
     : `<button class="btn" data-commit="${esc(it.id)}">${it.committed ? 'Mark optional' : 'Mark committed'}</button>`;
   return {
     k: `${typeWord(it)} · ${status}${isRanged(it) ? ` · ${it.minLen}–${unitText(it.maxLen, it.unit)}` : ''}`, t: it.name, c: `var(--c-${it.color})`,
-    body: dl(rows) + (c ? warn(c.gaps, 'gap', 'with nothing booked') + warn(c.overlaps, 'ovl', 'booked twice') : '') + moveWarn +
+    body: dl(rows) + (c ? warn(c.gaps, 'gap', 'with nothing booked') + warn(c.overlaps, 'ovl', 'booked twice') : '')
+      + (c?.overlaps.length ? `<p class="sh-actions"><button class="btn" data-fixovl="${esc(it.id)}">Fix double booking</button></p>` : '') + moveWarn +
       `<div class="steps">${toggle}${it.len !== undefined ? `<button data-set="${esc(it.id)}:${it.len - step}" ${it.len <= mn ? 'disabled' : ''}>One ${UNIT_WORDS[it.unit][0]} shorter</button><button data-set="${esc(it.id)}:${it.len + step}" ${it.len >= mx ? 'disabled' : ''}>One ${UNIT_WORDS[it.unit][0]} longer</button>` : ''}${starts}</div>` +
       it.costs.filter((l) => l.type === 'date' && l.route).map((l) => nearby(doc, /** @type {string} */ (l.route), Math.floor(p.start))).join('') +
       linksView(it) + picturesView(it) + inside + actions,
@@ -317,6 +321,25 @@ function costEditor(doc, line) {
 }
 
 /**
+ * Items in the plan's other trips: everything inside the options of its
+ * fork except the one `near` is in (or, when `near` is outside the fork,
+ * the pick). The add form leaves them out, so its lists hold only the trip
+ * you're working on.
+ * @param {PlanDoc} doc
+ * @param {Item | undefined} near The item being edited, or where a new one goes.
+ * @returns {Set<string>}
+ */
+function elsewhere(doc, near) {
+  const fork = forkOf(doc);
+  if (!fork) return new Set();
+  const opts = kidsOf(doc, fork.id), chain = near ? [near, ...ancestors(doc, near)] : [];
+  const home = opts.find((o) => chain.includes(o)) ?? opts[0];
+  const out = new Set();
+  for (const o of opts) if (o !== home) for (const id of subtree(doc, o.id)) out.add(id);
+  return out;
+}
+
+/**
  * Add/edit form for an item, group or window.
  * @param {App} app
  * @param {Item | null} it Item to edit, or null to add one.
@@ -333,13 +356,16 @@ function formView(app, it, want, parentId) {
   const banned = it ? subtree(doc, it.id) : new Set();
   /** @param {Item} x @returns {string} */
   const label = (x) => `${'· '.repeat(ancestors(doc, x).length)}${x.name}${x.kind === 'group' ? ' (either/or)' : ''}`;
-  const parents = doc.items.filter((x) => x.kind !== 'window' && !banned.has(x.id)).map((x) => /** @type {[string, string]} */ ([x.id, label(x)]));
+  const away = elsewhere(doc, it ?? byId(doc, parent));
+  const parents = doc.items.filter((x) => x.kind !== 'window' && !banned.has(x.id) && !away.has(x.id)).map((x) => /** @type {[string, string]} */ ([x.id, label(x)]));
   const above = new Set(ancestors(doc, it ?? /** @type {Item} */ ({ parent })).map((a) => a.id));
-  const afters = doc.items.filter((x) => !banned.has(x.id) && !above.has(x.id) && x.id !== parent)
+  const afters = doc.items.filter((x) => !banned.has(x.id) && !above.has(x.id) && x.id !== parent && !away.has(x.id))
     .map((x) => /** @type {[string, string]} */ ([`after:${x.id}`, `After ${label(x).replace(/^(· )+/, '')}`]));
   const at = it ? layout(doc).get(it.id) : undefined;
   const starts = it?.after ? `after:${it.after}` : it?.start || kind === 'window' || !parent ? 'date' : 'parent';
-  const date = it?.start ? isoOf(dayOf(it.start) + Math.floor(it.offset)) : at ? isoOf(at.start) : today;
+  const pp = parent ? layout(doc).get(parent) : undefined;
+  const date = it?.start ? isoOf(dayOf(it.start) + Math.floor(it.offset)) : at ? isoOf(at.start) : pp ? isoOf(pp.start) : today;
+  const off = it && !it.start ? Math.floor(it.offset) : 0;
   const time = it?.unit === 'hour' && at ? hhmm((at.start % 1) * 24) : moment ? '10:00' : '09:00';
   const costs = it?.costs.length ? it.costs : kind === 'item' ? [{ label: what === 'transport' ? 'Fare' : what === 'event' ? 'Ticket' : '', type: /** @type {CostLine['type']} */ (moment ? 'fixed' : 'per'), amount: 0, pp: moment }] : [];
   const title = { place: 'place', stay: 'stay', transport: 'transport', event: 'event', group: 'either/or group', window: 'constraint' }[what];
@@ -355,12 +381,12 @@ function formView(app, it, want, parentId) {
   ${select('Inside', 'parent', [['', 'Top level'], ...parents], parent ?? '', 'full not-window')}
   ${select('Starts', 'starts', [['parent', 'When what it\'s inside starts'], ['date', 'On a date'], ...afters], starts, 'full not-window')}
   ${input('Start date', 'start', date, 'type="date"', 'only-date')}
-  ${input('Days later', 'offset', it && !it.start ? Math.floor(it.offset) : 0, 'type="number" step="1"', 'only-offset')}
+  <label class="only-offset"><span>How many days after that</span><span class="offset"><input name="offset" type="number" min="0" step="1" inputmode="numeric" value="${Math.abs(off)}" aria-label="Days"><select name="offsetDir" aria-label="Earlier or later">${options([['1', 'days later'], ['-1', 'days earlier']], off < 0 ? '-1' : '1')}</select></span></label>
   ${input('Time', 'at', time, 'type="time"', 'only-time')}
   ${select('Measured in', 'unit', [['night', 'Nights'], ['day', 'Days'], ['hour', 'Hours']], it?.unit ?? (moment ? 'hour' : 'night'), 'only-item not-transport')}
   ${input('Length', 'len', it?.len ?? (kind === 'window' ? 90 : it ? '' : moment ? 2 : 7), 'type="number" min="0.25" step="any"', 'not-group len')}
-  ${input('Fewest (optional)', 'minLen', it?.minLen, 'type="number" min="0.25" step="any"', 'only-item')}
-  ${input('Most (optional)', 'maxLen', it?.maxLen, 'type="number" min="0.25" step="any"', 'only-item')}
+  ${input('Fewest (optional)', 'minLen', it?.minLen, 'type="number" min="0.25" step="any"', 'only-ranged')}
+  ${input('Most (optional)', 'maxLen', it?.maxLen, 'type="number" min="0.25" step="any"', 'only-ranged')}
   <label class="check only-commit"><input type="checkbox" name="committed"${it?.committed === false ? '' : ' checked'}> Committed (counts in totals)</label>
   ${select('Color', 'color', COLORS.map((c) => [c, c[0].toUpperCase() + c.slice(1)]), it?.color ?? (moment ? 'gray' : 'teal'), 'only-item')}
   <fieldset class="only-item costs"><legend>Costs</legend><div class="cost-rows">${costs.map((l) => costEditor(doc, l)).join('')}</div>
@@ -397,6 +423,7 @@ function syncForm(f, doc) {
   const starts = kind === 'window' ? 'date' : startsEl.value;
   const show = (/** @type {string} */ sel, /** @type {boolean} */ on) => f.querySelectorAll(sel).forEach((el) => { /** @type {HTMLElement} */ (el).hidden = !on; });
   show('.only-item', kind === 'item');
+  show('.only-ranged', kind === 'item' && what !== 'transport' && what !== 'event');
   show('.only-transport', what === 'transport');
   show('.not-transport', what !== 'transport');
   show('.not-window', kind !== 'window');
@@ -430,6 +457,13 @@ function typeDefaults(f) {
   if (!['place', 'stay', 'transport', 'event'].includes(what) || (el('unit').value === 'hour') === moment) return;
   el('unit').value = moment ? 'hour' : 'night';
   el('len').value = moment ? '2' : '7';
+  // Untouched cost rows follow: a ticket or fare is a fixed price, a room is by the night.
+  f.querySelectorAll('.cost-row').forEach((row) => {
+    const q = (/** @type {string} */ n) => /** @type {HTMLInputElement} */ (row.querySelector(`[name="${n}"]`));
+    if (+q('c-amount').value || q('c-type').value === 'date') return;
+    q('c-type').value = moment ? 'fixed' : 'per';
+    if (!q('c-label').value || ['Fare', 'Ticket'].includes(q('c-label').value)) q('c-label').value = what === 'transport' ? 'Fare' : what === 'event' ? 'Ticket' : '';
+  });
   if (what === 'transport') el('mode').value = modeOf(el('name').value) === 'other' ? 'plane' : modeOf(el('name').value);
 }
 
@@ -459,7 +493,7 @@ function saveItem(app, f) {
     if (Number.isNaN(dayOf(str('start')))) return 'Pick a start date.';
     it.start = str('start');
   } else if (!parent) return 'Pick a start date for top-level items.';
-  if (starts !== 'date') it.offset = Math.round(numOrNaN('offset')) || 0;
+  if (starts !== 'date') it.offset = (str('offsetDir') === '-1' ? -1 : 1) * Math.abs(Math.round(numOrNaN('offset')) || 0);
   if (unit === 'hour' && !it.after) {
     const h = parseHhmm(str('at'));
     if (Number.isNaN(h)) return 'The time looks wrong.';
@@ -508,7 +542,7 @@ function saveItem(app, f) {
     if (route) d.routes[route[0]] = route[1];
     const i = d.items.findIndex((x) => x.id === id);
     if (i >= 0) d.items[i] = it;
-    else d.items.push(it);
+    else insertItem(d, it);
     pruneRoutes(d);
   });
   if (parentId) app.open.add(parentId);
@@ -619,7 +653,7 @@ export class Sheet {
     if (!m) return;
     const id = uid(), name = `${m.from} → ${m.to}`, parent = moveParent(doc, m.stay);
     app.change((d) => {
-      d.items.push(makeItem({ id, name, type: 'transport', mode: 'plane', unit: 'hour', len: 2, start: isoOf(m.day), at: 10, color: 'gray',
+      insertItem(d, makeItem({ id, name, type: 'transport', mode: 'plane', unit: 'hour', len: 2, start: isoOf(m.day), at: 10, color: 'gray',
         costs: [{ label: 'Fare', type: 'fixed', amount: 0, pp: true }], ...(parent && { parent }) }));
     });
     if (parent) app.open.add(parent);
@@ -668,6 +702,7 @@ export class Sheet {
       if (p) app.change((doc) => { setEdge(doc, id, 'start', Math.floor(p.start) + +n); });
     }
     if (d.addmove) this.addMove(d.addmove);
+    if (d.fixovl) { const id = d.fixovl; app.change((doc) => { fixOverlaps(doc, id, app.optional); }); }
     if (d.rank) { const [id, n] = split(d.rank); app.change((doc) => setRank(doc, id, +n)); }
     if (d.commit) app.change((doc) => { const it = byId(doc, d.commit); if (it) it.committed = !it.committed; });
     if (d.drill) { app.drillTo(d.drill); app.select(null); }
@@ -691,12 +726,14 @@ export class Sheet {
     if (d.delete) {
       const it = byId(app.doc, d.delete);
       const n = it ? subtree(app.doc, it.id).size - 1 : 0;
-      if (it && confirm(`Delete "${it.name}"${n ? ` and the ${n} item${n === 1 ? '' : 's'} inside it` : ''}? Items that follow it keep their dates.`)) {
+      if (it) {
+        const before = structuredClone(app.doc);
         let imgs = /** @type {string[]} */ ([]);
         app.change((doc) => { imgs = removeItem(doc, it.id); });
-        imgs.forEach((img) => api.deleteImage(img).catch(() => {}));
         if (app.drill && !byId(app.doc, app.drill)) app.drillTo(null);
         app.select(null);
+        // Pictures are only deleted once the chance to undo has passed.
+        app.undoable(`Deleted ${it.name}${n ? ` and ${n} inside` : ''}`, before, () => imgs.forEach((img) => api.deleteImage(img).catch(() => {})));
       }
     }
   }

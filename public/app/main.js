@@ -12,11 +12,11 @@ import { Cards } from './cards.js';
 import { Compare } from './compare.js';
 import { prepare } from './images.js';
 import {
-  byId, clamp, coverage, emptyDoc, fmt, isPicked, isRanged, kidsOf, layout, MAX_IMAGES, money, normalize, pick, pivotOf, sampleDoc,
-  total, unitText,
+  ancestors, byId, clamp, coverage, emptyDoc, fixOverlaps, fmt, isPicked, isRanged, kidsOf, layout, MAX_IMAGES, money, normalize, pick,
+  pivotOf, sampleDoc, total, unitText,
 } from './model.js';
 import { Lanes } from './lanes.js';
-import { missingMoves } from './places.js';
+import { missingMoves, pastWindows } from './places.js';
 import { RouteMap } from './routemap.js';
 import { Sheet } from './sheet.js';
 import { Story } from './story.js';
@@ -58,6 +58,12 @@ let plans = [];
 let planId = /** @type {string | null} */ (null);
 /** Pending save timer. */
 let saveTimer = 0;
+/** Whether a plan (or the offline sample) has been shown yet; until then nothing plan-specific is drawn. */
+let loaded = false;
+/** How long the Undo toast stays, in ms. */
+const UNDO_MS = 8000;
+/** The pending undo: the plan as it was, and what to do once it can't be undone. */
+let undo = /** @type {{before: import('./model.js').PlanDoc, expire: () => void, timer: number} | null} */ (null);
 
 /** Saves which items are expanded, per plan. */
 function storeOpen() { if (planId) store(`span-open:${planId}`, JSON.stringify([...app.open])); }
@@ -100,6 +106,12 @@ const app = {
     timeline.reset();
     renderAll();
   },
+  undoable(text, before, expire = () => {}) {
+    settleUndo();
+    undo = { before, expire, timer: window.setTimeout(settleUndo, UNDO_MS) };
+    $('#toast-t').textContent = text;
+    $('#toast').hidden = false;
+  },
   async attach(id, files) {
     const it = byId(app.doc, id);
     if (!it) return;
@@ -129,6 +141,16 @@ const calendar = new Calendar($('#calendar'), app);
 const routemap = new RouteMap($('#routemap'), app);
 const cards = new Cards($('#cards'), app);
 const story = new Story($('#story'), app);
+
+/** Ends the chance to undo: hides the toast and runs what was waiting on it. */
+function settleUndo() {
+  if (!undo) return;
+  clearTimeout(undo.timer);
+  const { expire } = undo;
+  undo = null;
+  $('#toast').hidden = true;
+  expire();
+}
 
 /**
  * Shows save/load state next to the plan picker.
@@ -167,7 +189,13 @@ async function save(keepalive = false) {
 
 /** Refills the plan picker. */
 function renderPicker() {
-  $('#plan').innerHTML = plans.map((p) => `<option value="${esc(p.id)}"${p.id === planId ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+  /** When a plan was made (or last changed), to tell plans with the same name apart. */
+  const when = (/** @type {import('./api.js').PlanRecord} */ p) =>
+    new Date((p.created_at ?? p.updated_at) * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const labels = plans.map((p) => (plans.filter((q) => q.name === p.name).length > 1 ? `${p.name} · made ${when(p)}` : p.name));
+  const seen = new Map();
+  const unique = labels.map((l) => { const n = (seen.get(l) ?? 0) + 1; seen.set(l, n); return n > 1 ? `${l} (${n})` : l; });
+  $('#plan').innerHTML = plans.map((p, i) => `<option value="${esc(p.id)}"${p.id === planId ? ' selected' : ''}>${esc(unique[i])}</option>`).join('');
   for (const id of ['#plan', '#plan-rename', '#plan-delete']) /** @type {HTMLButtonElement} */ ($(id)).disabled = !planId;
 }
 
@@ -177,6 +205,8 @@ function renderPicker() {
  * @param {unknown} body Stored plan document (any version).
  */
 function show(body) {
+  settleUndo();
+  loaded = true;
   app.doc = normalize(body);
   app.sel = null;
   app.drill = null;
@@ -201,7 +231,7 @@ async function open(id) {
   store('span-plan', id);
   renderPicker();
   renderAll();
-  status('Saved');
+  status('');
 }
 
 /**
@@ -245,8 +275,10 @@ function summary() {
     const win = [...at.values()].find((w) => w.item.kind === 'window' && w.start <= p.start && p.start < w.end);
     let spare = '';
     if (win) {
-      const left = Math.floor(win.end - 1 - p.end);
-      spare = left >= 0 ? ` · ${left} day${left === 1 ? '' : 's'} spare on ${esc(win.item.name)}` : ` · <b class="bad">${-left} day${left === -1 ? '' : 's'} past ${esc(win.item.name)}</b>`;
+      const last = Math.ceil(win.end) - 1, left = Math.floor(last - p.end);
+      spare = left >= 0
+        ? ` · ${esc(win.item.name)} ends ${fmt(last, { weekday: 'short' })}, ${left} day${left === 1 ? '' : 's'} after you leave`
+        : ` · <b class="bad">you leave ${-left} day${left === -1 ? '' : 's'} after ${esc(win.item.name)} ends</b>`;
     }
     out += `<span class="sum-main"><span class="mono">Leave ${esc(pivot.name)}</span><b>${fmt(p.end, { weekday: 'short' })}</b><span>${unitText(pivot.len ?? 1, pivot.unit)}${spare}</span></span>`;
   }
@@ -254,14 +286,19 @@ function summary() {
     const root = drill ? byId(doc, drill) : undefined, sum = total(doc, { optional, root: root?.id, at });
     out += `<span class="sum-opt">${root ? esc(root.name) : 'Plan total'} <b>${money(pick(sum, filter), cur)}</b></span>`;
   }
-  // Only the options you've picked: a gap inside a trip you didn't pick isn't one you have to fill.
-  const cov = [...coverage(doc, at, optional)].filter(([id]) => { const it = byId(doc, id); return it && isPicked(doc, it); });
-  const count = (/** @type {'gaps' | 'overlaps'} */ k) => cov.filter(([, c]) => c[k].length);
-  const gaps = count('gaps'), ovl = count('overlaps');
+  // Gaps only in what you've picked (a gap in a trip you didn't pick isn't one to fill); a night booked twice anywhere.
+  const all = [...coverage(doc, at, optional)];
+  const cov = all.filter(([id]) => { const it = byId(doc, id); return it && isPicked(doc, it); });
+  const gaps = cov.filter(([, c]) => c.gaps.length), ovl = all.filter(([, c]) => c.overlaps.length);
   const nights = (/** @type {[string, {gaps: [number, number][], overlaps: [number, number][]}][]} */ list, /** @type {'gaps' | 'overlaps'} */ k) =>
     list.reduce((t, [, c]) => t + c[k].reduce((n, [a, b]) => n + b - a, 0), 0);
   if (gaps.length) out += `<button class="sum-warn gap" data-sel="item:${esc(gaps[0][0])}">${nights(gaps, 'gaps')} unbooked</button>`;
-  if (ovl.length) out += `<button class="sum-warn ovl" data-sel="item:${esc(ovl[0][0])}">${nights(ovl, 'overlaps')} double-booked</button>`;
+  for (const [id] of ovl) {
+    const it = /** @type {import('./model.js').Item} */ (byId(doc, id)), n = nights([[id, /** @type {any} */ (all.find(([k]) => k === id))[1]]], 'overlaps');
+    const trip = isPicked(doc, it) ? '' : ` in ${esc(([it, ...ancestors(doc, it)].find((a) => byId(doc, a.parent)?.kind === 'group') ?? it).name)}`;
+    out += `<span class="sum-pair"><button class="sum-warn ovl" data-sel="item:${esc(id)}">${n} double-booked${trip}</button><button class="sum-fix" data-fix="${esc(id)}">Fix</button></span>`;
+  }
+  for (const w of pastWindows(doc, optional)) out += `<button class="sum-warn gap" data-sel="item:${esc(w.item.id)}">${esc(w.text)}${w.trip ? ` (${esc(w.trip)})` : ''}</button>`;
   const miss = missingMoves(doc, at, optional);
   if (miss.length) out += `<button class="sum-warn gap" data-sel="item:${esc(miss[0].stay.id)}" title="${esc(miss.map((m) => `${m.from} → ${m.to}`).join(', '))}">${miss.length} move${miss.length === 1 ? '' : 's'} missing</button>`;
   const tag = { all: 'stays + travel', stays: 'stays only', travel: 'travel only', none: 'costs hidden' }[filter];
@@ -272,8 +309,8 @@ function summary() {
 function renderAll() {
   const { doc, filter, optional } = app, at = layout(doc), pivot = pivotOf(doc);
   const empty = !doc.items.length, view = views[app.view];
-  $('#empty').hidden = !empty;
-  for (const v of Object.values(views)) for (const sel of v.els) $(sel).hidden = empty || v !== view;
+  $('#empty').hidden = !empty || !loaded;
+  for (const v of Object.values(views)) for (const sel of v.els) $(sel).hidden = !loaded || empty || v !== view;
   document.querySelectorAll('#views button').forEach((b) => b.setAttribute('aria-pressed', String(/** @type {HTMLElement} */ (b).dataset.v === app.view)));
 
   // Length slider for the pivot, when it has a range.
@@ -291,10 +328,11 @@ function renderAll() {
   document.querySelectorAll('#filter .chip').forEach((b) => b.setAttribute('aria-pressed', String(/** @type {HTMLElement} */ (b).dataset.f === filter)));
   $('#optional').setAttribute('aria-pressed', String(optional));
   const people = /** @type {HTMLInputElement} */ ($('#people'));
-  if (document.activeElement !== people) people.value = String(doc.people);
+  if (document.activeElement !== people) people.value = loaded ? String(doc.people) : '';
+  $('#more-sum').textContent = `Costs: ${{ all: 'all', stays: 'stays', travel: 'travel', none: 'hidden' }[filter]}${optional ? ' + optional' : ''} · ${doc.people} ${doc.people === 1 ? 'person' : 'people'}`;
 
-  $('#summary').innerHTML = empty ? '' : summary();
-  if (!empty) view.render();
+  $('#summary').innerHTML = empty || !loaded ? '' : summary();
+  if (!empty && loaded) view.render();
   sheet.render();
 }
 
@@ -353,8 +391,17 @@ $('#people').addEventListener('change', (e) => {
 });
 $('#add').addEventListener('click', () => app.select(`add:item:${app.drill ?? ''}`));
 $('#summary').addEventListener('click', (e) => {
-  const sel = /** @type {HTMLElement} */ (e.target).closest('button')?.dataset.sel;
-  if (sel) app.select(sel);
+  const d = /** @type {HTMLElement} */ (e.target).closest('button')?.dataset;
+  if (d?.fix) { const id = d.fix; app.change((doc) => { fixOverlaps(doc, id, app.optional); }); }
+  else if (d?.sel) app.select(d.sel);
+});
+$('#toast-undo').addEventListener('click', () => {
+  if (!undo) return;
+  const { before } = undo;
+  clearTimeout(undo.timer);
+  undo = null;
+  $('#toast').hidden = true;
+  app.change((doc) => { Object.assign(doc, before); });
 });
 $('#empty').addEventListener('click', (e) => {
   const act = /** @type {HTMLElement} */ (e.target).closest('button')?.dataset.act;
@@ -412,7 +459,8 @@ addEventListener('visibilitychange', () => { if (document.visibilityState === 'h
 // Keep the timeline and chart sized to the window; switch phone/desktop behavior.
 let resizeRaf = 0;
 addEventListener('resize', () => { cancelAnimationFrame(resizeRaf); resizeRaf = requestAnimationFrame(renderAll); });
-NARROW.addEventListener('change', (e) => { app.narrow = e.matches; renderAll(); });
+NARROW.addEventListener('change', (e) => { app.narrow = e.matches; /** @type {HTMLDetailsElement} */ ($('#more')).open = !e.matches; renderAll(); });
+/** @type {HTMLDetailsElement} */ ($('#more')).open = !NARROW.matches;
 
 syncTheme();
 boot();

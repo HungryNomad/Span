@@ -26,6 +26,7 @@
  * @property {(id: string) => void} toggle Expands or collapses an item in place.
  * @property {(id: string | null) => void} drillTo Focuses the timeline on an item (null = whole plan).
  * @property {(id: string, files: Iterable<Blob>) => Promise<void>} attach Adds pictures to an item.
+ * @property {(text: string, before: import('./model.js').PlanDoc, expire?: () => void) => void} undoable Shows an Undo toast that puts the plan back as `before`; `expire` runs once it can no longer be undone.
  */
 
 /**

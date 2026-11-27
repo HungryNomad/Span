@@ -3,12 +3,14 @@
  * The lanes view (Span's main view): one row per item on a day grid, drawn
  * as rounded bubbles. Either/or groups collapse to a deck showing the pick;
  * forks (groups whose options are whole trips) collapse to one chain of
- * bubbles per option with its total. Open a row to see what's inside, and
- * tap an option's number to make it the pick. Zooms from hours to years
- * with the zoom timeline's controls (presets, slider, pinch, Ctrl+scroll),
- * and a bubble's ends drag to change dates.
- * Transport and events draw as tags with their icon, and a change of place
- * with nothing booked between gets a red mark.
+ * bubbles per option with its total. Tap a row's name to open or close it,
+ * a bubble to see its details, and an option's number to make it the pick.
+ * Zooms from hours to years with the zoom timeline's controls (presets,
+ * slider, pinch, Ctrl+scroll), and a bubble's ends drag to change dates.
+ * Transport and events draw as tags with their icon (just the icon when
+ * they're too short to read at this zoom), and a change of place with
+ * nothing booked between gets a red mark. The name column sizes itself to
+ * the names and can be dragged wider or narrower.
  *
  * @module
  */
@@ -18,14 +20,14 @@ import {
 } from './model.js';
 import { missingMoves } from './places.js';
 import { axisMarks, fromSlider, levelOf, markPreset, PPD_MAX, PRESETS, toSlider, wireZoom, zoomControls } from './zoomkit.js';
-import { costRange, forkOf, isFork, rateOf, totalIfPicked, valueOf } from './trip.js';
+import { forkOf, isFork, rateOf, rivalDelta, valueOf } from './trip.js';
 import { drag, esc } from './ui.js';
 
 /** @typedef {import('./ui.js').App} App */
 /** @typedef {import('./model.js').Item} Item */
 /** @typedef {import('./model.js').Placed} Placed */
 /** @typedef {import('./model.js').Layout} Layout */
-/** @typedef {{dep: number, h: number, lab: string, trk: string, tint?: string}} Row */
+/** @typedef {{dep: number, h: number, lab: string, labAttrs: string, trk: string, tint?: string}} Row */
 
 /** Row height, and height of one option line in a closed fork. */
 const ROW = 36, LINE = 28;
@@ -37,6 +39,14 @@ const MIN_SPAN = 400;
 const HANDLES_MIN = 30;
 /** Bubbles narrower than this show a shortened name (the full text is on hover). */
 const SHORT_MIN = 64;
+/** A move or event this many pixels wide or more draws as wide as it lasts. */
+const LONG_MIN = 56;
+/** Below this many pixels per day, a short move or event shows only its icon. */
+const TAG_PPD = 40;
+/** Narrowest and widest the name column may be dragged, in pixels. */
+const L_MIN = 96, L_MAX = 520;
+/** Pixels a pointer must move before a drag on a bubble's end starts. */
+const DRAG_SLOP = 4;
 
 /**
  * Icon for a moment on the line: the transport's mode, or a diamond for an event.
@@ -82,7 +92,8 @@ function store(k, v) { try { localStorage.setItem(k, v); } catch { /* not persis
 
 /**
  * The trips the plan is still choosing between (its first fork), as buttons
- * with each trip's total; the pick is starred. Tapping one sends
+ * with each trip's own total (the same total its row shows); the pick is
+ * starred. Tapping one sends
  * `data-pick`, which every view handles by making it the pick.
  * @param {App} app
  * @returns {string} HTML, empty when there's no fork.
@@ -92,7 +103,7 @@ export function leanBar(app) {
   if (!fork) return '';
   const opts = { optional, filter }, cur = doc.currency;
   const btns = kidsOf(doc, fork.id).map((k, i) =>
-    `<button class="${i === 0 ? 'on' : ''}" style="--c:var(--c-${k.color})" data-pick="${esc(k.id)}" aria-pressed="${i === 0}" title="Make ${esc(k.name)} the pick">${i === 0 ? '★ ' : ''}${esc(k.name)}${filter === 'none' ? '' : `<b>${money(totalIfPicked(doc, k.id, opts), cur)}</b>`}</button>`).join('');
+    `<button class="${i === 0 ? 'on' : ''}" style="--c:var(--c-${k.color})" data-pick="${esc(k.id)}" aria-pressed="${i === 0}" title="Make ${esc(k.name)} the pick">${i === 0 ? '★ ' : ''}${esc(k.name)}${filter === 'none' ? '' : `<b>${money(valueOf(doc, k.id, opts), cur)}</b>`}</button>`).join('');
   return `<div class="lean"><span class="lean-k">${esc(fork.name)}</span>${btns}</div>`;
 }
 
@@ -121,9 +132,14 @@ export class Lanes {
     this.justDragged = false;
     /** Whether the grid has been drawn (so there's a scroll position to keep). */
     this.drawn = false;
+    /** Name column widths dragged by hand on phone and wider screens (0 fits the names). */
+    this.labW = { narrow: Number(load('span-lanes-L-narrow')) || 0, wide: Number(load('span-lanes-L')) || 0 };
+    /** Whether the help line has been closed (it shows on the first visit only). */
+    this.hintSeen = load('span-lanes-hint') === '1';
+    if (!this.hintSeen) store('span-lanes-hint', '1');
     el.innerHTML = `<div class="ln-lean"></div>
 <div class="tools ln-tools">${zoomControls()}<div class="seg ln-all"><button data-all="1">Expand all</button><button data-all="0">Collapse all</button></div></div>
-<p class="ln-hint"></p><div class="ln-scroll"></div><div class="ln-tip" role="status" hidden></div>`;
+<p class="ln-hint"${this.hintSeen ? ' hidden' : ''}></p><div class="ln-scroll"></div><div class="ln-tip" role="status" hidden></div>`;
     this.lean = /** @type {HTMLElement} */ (el.querySelector('.ln-lean'));
     this.hint = /** @type {HTMLElement} */ (el.querySelector('.ln-hint'));
     this.pre = /** @type {HTMLElement} */ (el.querySelector('[data-zp]'));
@@ -138,8 +154,18 @@ export class Lanes {
     const { el, sc } = this;
     el.addEventListener('click', (e) => this.click(/** @type {HTMLElement} */ (e.target)));
     sc.addEventListener('pointerdown', (e) => {
-      const h = /** @type {HTMLElement} */ (e.target).closest('.ln-h');
+      const t = /** @type {HTMLElement} */ (e.target), h = t.closest('.ln-h');
       if (h instanceof HTMLElement && e.button === 0) this.edge(e, h);
+      else if (t.closest('.ln-rsz') && e.button === 0) this.resize(e);
+    });
+    sc.addEventListener('dblclick', (e) => {
+      if (!/** @type {HTMLElement} */ (e.target).closest('.ln-rsz')) return;
+      this.setLabW(0);
+      this.render();
+    });
+    sc.addEventListener('keydown', (e) => {
+      const t = /** @type {HTMLElement} */ (e.target);
+      if ((e.key === 'Enter' || e.key === ' ') && t.matches('.ln-lab[data-tg]')) { e.preventDefault(); this.click(t); }
     });
     this.slider.addEventListener('input', () => this.zoomTo(fromSlider(+this.slider.value, this.geo.min)));
     wireZoom(sc, () => this.geo.ppd, (p, anchor) => this.zoomTo(p, anchor));
@@ -201,17 +227,25 @@ export class Lanes {
    */
   edge(e, h) {
     const { app } = this, id = /** @type {string} */ (h.dataset.edge), side = h.dataset.side === 'start' ? 'start' : 'end';
+    const p0 = layout(app.doc).get(id);
+    if (!p0) return;
     e.stopPropagation();
-    let last = NaN;
+    // The edge moves by whole days as far as the pointer moves, wherever on the handle you grabbed it.
+    const x0 = e.clientX, from = side === 'start' ? Math.floor(p0.start) : Math.round(p0.end), ppd = this.geo.ppd;
+    let last = from, moved = false;
     this.el.classList.add('dragging');
     drag(e, (ev) => {
-      const day = Math.round(this.dayAt(ev.clientX));
-      if (day === last) return;
-      last = day;
-      app.change((doc) => { setEdge(doc, id, side, day); });
+      if (!moved && Math.abs(ev.clientX - x0) < DRAG_SLOP) return;
+      moved = true;
+      const day = from + Math.round((ev.clientX - x0) / ppd);
+      if (day !== last) {
+        last = day;
+        app.change((doc) => { setEdge(doc, id, side, day); });
+      }
       const p = layout(app.doc).get(id), kid = p && (p.item.kind === 'group' ? kidsOf(app.doc, id)[0] : p.item);
       if (!p || !kid) return;
-      this.tip.textContent = `${side === 'start' ? 'From' : 'To'} ${fmt(side === 'start' ? p.start : p.end, { weekday: 'short' })} · ${unitText(unitsOf({ ...p, item: kid }), kid.unit)}`;
+      const at = side === 'start' ? p.start : p.end, shift = Math.round(at - (side === 'start' ? p0.start : p0.end));
+      this.tip.textContent = `${side === 'start' ? 'From' : 'To'} ${fmt(at, { weekday: 'short' })} · ${unitText(unitsOf({ ...p, item: kid }), kid.unit)}${shift ? ` (${shift > 0 ? '+' : '−'}${Math.abs(shift)}d)` : ''}`;
       this.tip.style.left = `${ev.clientX}px`;
       this.tip.style.top = `${ev.clientY - 44}px`;
       this.tip.hidden = false;
@@ -221,6 +255,56 @@ export class Lanes {
       this.justDragged = true;
       setTimeout(() => { this.justDragged = false; }, 60);
     });
+  }
+
+  /**
+   * Drags the name column's edge to make it wider or narrower; the width is
+   * kept for next time (double-click the edge to fit the names again).
+   * @param {PointerEvent} e
+   */
+  resize(e) {
+    e.preventDefault();
+    const x0 = e.clientX, w0 = this.geo.L;
+    drag(e, (ev) => {
+      this.setLabW(clamp(Math.round(w0 + ev.clientX - x0), L_MIN, L_MAX));
+      this.raf ||= requestAnimationFrame(() => { this.raf = 0; this.render(); });
+    }, () => {
+      this.justDragged = true;
+      setTimeout(() => { this.justDragged = false; }, 60);
+    });
+  }
+
+  /**
+   * Keeps a hand-set name column width for this screen size.
+   * @param {number} w Pixels, or 0 to fit the names again.
+   */
+  setLabW(w) {
+    const k = this.app.narrow ? 'narrow' : 'wide';
+    this.labW[k] = w;
+    store(k === 'narrow' ? 'span-lanes-L-narrow' : 'span-lanes-L', w ? String(w) : '');
+  }
+
+  /**
+   * Width of the name column: as dragged by hand, else wide enough for the
+   * longest name showing, within limits that leave room for the chart.
+   * @param {Set<string>} open Rows that are open.
+   * @returns {number} Pixels.
+   */
+  labelWidth(open) {
+    const { doc, narrow } = this.app, vw = this.sc.clientWidth || this.el.clientWidth || innerWidth;
+    const set = this.labW[narrow ? 'narrow' : 'wide'];
+    if (set) return clamp(set, L_MIN, Math.max(L_MIN, vw - 120));
+    let need = 0;
+    /** Measures the rows under `parent`, and under those that are open. */
+    const walk = (/** @type {string | undefined} */ parent, /** @type {number} */ dep, /** @type {boolean} */ ranked) => {
+      for (const it of kidsOf(doc, parent)) {
+        need = Math.max(need, 14 + dep * 13 + (ranked ? 24 : 0) + 24 + [...it.name].length * 7.3 + (narrow ? 0 : 72));
+        if (open.has(it.id)) walk(it.id, dep + 1, it.kind === 'group');
+      }
+    };
+    walk(undefined, 0, false);
+    const base = narrow ? 138 : 214, cap = narrow ? Math.min(240, vw * 0.55) : Math.min(L_MAX, vw * 0.4);
+    return Math.round(clamp(need, base, Math.max(base, cap)));
   }
 
   /** Forgets what was open, for a newly opened plan. */
@@ -234,6 +318,7 @@ export class Lanes {
    * @param {HTMLElement} t Click target.
    */
   click(t) {
+    if (t.closest('.ln-hint-x')) { this.hintSeen = true; this.hint.hidden = true; return; }
     const b = /** @type {HTMLElement | null} */ (t.closest('[data-tg],[data-pick],[data-all],[data-p],[data-sel]'));
     if (!b || !this.open || this.justDragged) return;
     const { app } = this, d = b.dataset;
@@ -274,7 +359,7 @@ export class Lanes {
     const span = body.length ? body : placed;
     const d0 = span.length ? Math.floor(Math.min(...span.map((p) => p.start))) - 1 : Math.floor(nowIdx());
     let d1 = span.length ? Math.ceil(Math.max(...span.map((p) => p.show))) + 2 : d0 + 30;
-    const L = narrow ? 138 : 214, TAIL = hide ? 24 : 96;
+    const L = this.labelWidth(open), TAIL = hide ? 24 : 96;
     const was = this.geo;
     this.geo = { ...was, L };
     const vw = this.view(), avail = vw - TAIL - 4, min = vw / Math.max(MIN_SPAN, d1 - d0);
@@ -284,6 +369,8 @@ export class Lanes {
       this.zoom = vw / PRESETS[this.active];
     }
     const ppd = this.zoom === 'fit' ? clamp(clamp(avail / (d1 - d0), FIT_MIN, FIT_MAX), min, PPD_MAX) : clamp(this.zoom, min, PPD_MAX);
+    // The fitted zoom stays put once drawn, so editing or opening a row doesn't zoom the chart under you.
+    if (this.zoom === 'fit') this.zoom = ppd;
     // Where the view was, as a day at the track's left edge, so a redraw doesn't jump and a zoom keeps its anchor.
     const left = this.keep ? this.keep.day - this.keep.ax / ppd : this.sc.scrollLeft / was.ppd + was.d0;
     d1 = Math.max(d1, d0 + Math.ceil(vw / ppd));
@@ -307,10 +394,24 @@ export class Lanes {
       const shown = w < SHORT_MIN ? esc(shortName(plain, w)) : text;
       return `<button class="ln-p ${cls}${tiny}${w < SHORT_MIN ? ' short' : ''}" style="left:${l}px;width:${w}px;top:${top}px;--c:var(--c-${color})" title="${esc(plain)}" ${attrs}><span>${shown}</span>${edge ? ends(edge, a) : ''}</button>`;
     };
-    /** A transport or event tag: at a moment, or as wide as it lasts when zoomed in enough. */
+    /**
+     * A transport or event tag at its real time: as wide as it lasts when
+     * zoomed in enough, a labelled tag when a day is wide enough to read
+     * it, else just its icon (the full text is its title).
+     */
     const flight = (/** @type {Item} */ it, /** @type {string} */ text, cls = '', attrs = '', top = 7) => {
       const p = P(it.id), w = (p.end - p.start) * ppd, ev = typeOf(it) === 'event' ? ' ev' : '';
-      return `<button class="ln-fl ${cls}${ev}${w >= 56 ? ' long' : ''}" style="left:${x(p.start)}px;top:${top}px${w >= 56 ? `;width:${w}px` : ''}" ${attrs}>${iconOf(it)} <span>${text}</span></button>`;
+      const plain = unesc(text.replace(/<em>/g, ' ').replace(/<[^>]*>/g, ''));
+      if (w < LONG_MIN && ppd < TAG_PPD) {
+        const more = /<em>([^<]*)<\/em>/.exec(text)?.[1] ?? '';
+        return `<button class="ln-fl icon ${cls}${ev}" style="left:${x(p.start)}px;top:${top}px" title="${esc(plain)}" aria-label="${esc(plain)}" ${attrs}>${iconOf(it)}${more ? `<em>${more}</em>` : ''}</button>`;
+      }
+      return `<button class="ln-fl ${cls}${ev}${w >= LONG_MIN ? ' long' : ''}" style="left:${x(p.start)}px;top:${top}px${w >= LONG_MIN ? `;width:${w}px` : ''}" title="${esc(plain)}" ${attrs}>${iconOf(it)} <span>${text}</span></button>`;
+    };
+    /** Pixels a tag drawn by {@link flight} takes, roughly, for placing what follows it. */
+    const flightW = (/** @type {Item} */ it, /** @type {string} */ text) => {
+      const p = P(it.id), w = (p.end - p.start) * ppd;
+      return w >= LONG_MIN ? w : ppd < TAG_PPD ? 26 : 24 + text.length * 7.2;
     };
     /** A small icon on the line where a move or event happens. */
     const dot = (/** @type {number} */ d, /** @type {number} */ top, /** @type {string} */ icon) => `<i class="ln-dot" style="left:${x(d)}px;top:${top}px">${icon}</i>`;
@@ -348,14 +449,13 @@ export class Lanes {
         const ks = kidsOf(doc, it.id), pk = ks[0];
         if (!pk) return '';
         const more = ks.length > 1 ? `<em>+${ks.length - 1}</em>` : '';
-        if (isHop(pk)) return flight(pk, `${esc(pk.name)}${more}`, '', `data-tg="${esc(it.id)}"`, top + 1);
+        if (isHop(pk)) return flight(pk, `${esc(pk.name)}${more}`, '', `data-sel="item:${esc(it.id)}"`, top + 1);
         const r = rateOf(pk);
         const text = named ? `${esc(it.name)} · ${nightsTxt(it)}` : `${esc(pk.name)}${r && !hide ? ` · ${money(r, cur)}` : ''}`;
-        return pill(p.start, p.end, pk.color, `${lead}${text}${more}`, `${ks.length > 1 ? 'deck' : ''} ${cls}`, `data-tg="${esc(it.id)}"`, top, it);
+        return pill(p.start, p.end, pk.color, `${lead}${text}${more}`, `${ks.length > 1 ? 'deck' : ''} ${cls}`, `data-sel="item:${esc(it.id)}"`, top, it);
       }
       if (isHop(it)) return flight(it, esc(it.name), '', `data-sel="item:${esc(it.id)}"`, top + 1);
-      const has = kidsOf(doc, it.id).length > 0;
-      return pill(p.start, p.end, it.color, `${lead}${arrival(it) ? '✈ ' : ''}${esc(it.name)} · ${nightsTxt(it)}`, `${cls}${typeOf(it) === 'event' ? ' ev' : ''}`, has ? `data-tg="${esc(it.id)}"` : `data-sel="item:${esc(it.id)}"`, top, it);
+      return pill(p.start, p.end, it.color, `${lead}${arrival(it) ? '✈ ' : ''}${esc(it.name)} · ${nightsTxt(it)}`, `${cls}${typeOf(it) === 'event' ? ' ev' : ''}`, `data-sel="item:${esc(it.id)}"`, top, it);
     };
 
     /**
@@ -367,6 +467,7 @@ export class Lanes {
      */
     const chain = (it, top, sm, lead) => {
       const ks = kidsOf(doc, it.id).filter((k) => k.kind !== 'window').sort((a, b) => P(a.id).start - P(b.id).start);
+      chainEnd = x(extent(it));
       if (!ks.length) return bubble(it, top, sm, lead);
       /** The move an item is, or the pick of a group of moves. */
       const hopOf = (/** @type {Item} */ k) => { const pk = k.kind === 'group' ? kidsOf(doc, k.id)[0] : k; return pk && isHop(pk) ? pk : undefined; };
@@ -374,20 +475,31 @@ export class Lanes {
       /** @type {Map<string, string>} */
       const icons = new Map();
       let h = '';
+      let end = -Infinity;
       for (const k of ks) {
         const hop = hopOf(k);
         if (!hop) continue;
         const day = Math.floor(P(hop.id).start), to = stays.find((s) => Math.floor(P(s.id).start) === day);
-        if (to) icons.set(to.id, `${icons.get(to.id) ?? ''}${iconOf(hop)} `);
-        else h += dot(P(hop.id).start, top + (sm ? 1 : 3), iconOf(hop));
+        if (to) { icons.set(to.id, `${icons.get(to.id) ?? ''}${iconOf(hop)} `); continue; }
+        // On the line, clear of the bubble before it (whose name it would cover) and of the last mark.
+        const before = stays.filter((s) => P(s.id).start <= P(hop.id).start).map((s) => x(P(s.id).end) + 11);
+        const at = Math.max(x(P(hop.id).start), end + 20, ...before);
+        h += dot(d0 + at / ppd, top + (sm ? 1 : 3), iconOf(hop));
+        end = at;
       }
+      chainEnd = Math.max(end + 12, ...stays.map((s) => x(P(s.id).end)));
       stays.forEach((k, i) => {
         const pre = `${i === 0 ? lead : ''}${icons.get(k.id) ?? ''}`;
         h += k.kind === 'group' || !kidsOf(doc, k.id).length ? bubble(k, top, sm, pre, true)
-          : pill(P(k.id).start, P(k.id).end, k.color, `${pre}${esc(k.name)} · ${nightsTxt(k)}`, `${sm ? 'sm' : ''}`, `data-tg="${esc(it.id)}"`, top, k);
+          : pill(P(k.id).start, P(k.id).end, k.color, `${pre}${esc(k.name)} · ${nightsTxt(k)}`, `${sm ? 'sm' : ''}`, `data-sel="item:${esc(k.id)}"`, top, k);
       });
       return h;
     };
+
+    /** Right edge, in pixels, of what the last {@link chain} drew (so a total after it doesn't sit on a mark). */
+    let chainEnd = 0;
+    /** A total just after the last chain drawn. */
+    const totAfter = (/** @type {number} */ n, top = 10) => totAt(d0 + (chainEnd - 4) / ppd, n, top);
 
     /** @type {Row[]} */
     const rows = [];
@@ -408,8 +520,10 @@ export class Lanes {
       else if (isHop(it)) sub = `${fmt(p.start)} ${hhmm((p.start % 1) * 24)}`;
       else sub = `${nightsTxt(it)}${hide ? '' : ` · ${money(val(it.id), cur)}`}`;
       const rk = group ? `<button class="ln-rk${picked ? ' pk' : ''}" style="--c:var(--c-${it.color})" data-pick="${esc(it.id)}" aria-label="Make ${esc(it.name)} the pick" aria-pressed="${picked}">${rank + 1}</button>` : '';
-      const car = has ? `<button class="ln-car${isOpen ? ' open' : ''}" data-tg="${esc(it.id)}" aria-expanded="${isOpen}" aria-label="${isOpen ? 'Close' : 'Open'} ${esc(it.name)}">▶</button>` : '<span class="ln-car none"></span>';
-      const lab = `${rk}${car}<button class="ln-n" data-sel="item:${esc(it.id)}" title="${esc(it.name)}">${esc(it.name)}</button><small>${sub}</small>`;
+      const car = `<span class="ln-car${has ? '' : ' none'}${isOpen ? ' open' : ''}" aria-hidden="true">${has ? '▶' : ''}</span>`;
+      // The whole name cell opens and closes the row; details open from the bubbles.
+      const lab = `${rk}${car}<span class="ln-n">${esc(it.name)}</span><small>${sub}</small>`;
+      const labAttrs = has ? ` data-tg="${esc(it.id)}" role="button" tabindex="0" aria-expanded="${isOpen}" aria-label="${isOpen ? 'Close' : 'Open'} ${esc(it.name)}"` : '';
 
       let trk = '', h = ROW;
       for (const m of miss) if (m.stay.id === it.id || (!isOpen && m.up.has(it.id))) trk += missMark(m, 7);
@@ -425,45 +539,45 @@ export class Lanes {
         // Closed fork: each trip as a chain of bubbles with its total.
         kids.forEach((k, i) => {
           const top = 6 + i * LINE;
-          trk += chain(k, top, true, `${i === 0 ? '★ ' : ''}${esc(k.name)}: `) + totAt(extent(k), totalIfPicked(doc, k.id, opts), top + 3);
+          trk += chain(k, top, true, `${i === 0 ? '★ ' : ''}${esc(k.name)}: `);
+          trk += totAfter(val(k.id), top + 3);
         });
         h = 12 + kids.length * LINE;
       } else if (it.kind === 'group') {
         const pk = kids[0];
         if (isOpen && isFork(doc, it) && kids.length > 1) {
-          const t0 = totalIfPicked(doc, kids[0].id, opts), t1 = totalIfPicked(doc, kids[1].id, opts), dl = t1 - t0;
-          trk += note(p.start, `${kids.map((k) => esc(k.name)).join(' or ')}${hide || !dl ? '' : ` · ${esc(kids[1].name)} is ${dl > 0 ? '+' : '−'}${money(Math.abs(dl), cur)} with its picks`}`);
+          trk += note(p.start, kids.map((k) => esc(k.name)).join(' or '));
         } else if (isOpen) {
           trk += pk && isHop(pk) ? note(P(pk.id).start + 0.3, `pick 1 of ${kids.length}`)
-            : pill(p.start, p.end, pk?.color ?? 'gray', `pick 1 of ${kids.length}${pk ? ` · ${nightsTxt(it)}` : ''}`, 'span', `data-tg="${esc(it.id)}"`, 6, it);
+            : pill(p.start, p.end, pk?.color ?? 'gray', `pick 1 of ${kids.length}${pk ? ` · ${nightsTxt(it)}` : ''}`, 'span', `data-sel="item:${esc(it.id)}"`, 6, it);
         } else trk += bubble(it, 6, false, '');
       } else if (isHop(it)) {
         const v = val(it.id);
+        const text = group && !picked ? esc(it.name) : `${esc(it.name)}${hide ? '' : ` · ${money(v, cur)}`}`;
+        let tail = p.start + flightW(it, unesc(text)) / ppd;
         if (group && !picked) {
-          const dl = v - val(kidsOf(doc, group.id)[0].id);
-          const tail = Math.max(p.end, p.start + (24 + it.name.length * 7.2) / ppd);
-          trk += flight(it, esc(it.name), 'ghost', `data-sel="item:${esc(it.id)}"`)
-            + (hide || !dl ? '' : note(tail, `${dl > 0 ? '+' : '−'}${money(Math.abs(dl), cur)}`));
-        } else trk += flight(it, `${esc(it.name)}${hide ? '' : ` · ${money(v, cur)}`}`, '', `data-sel="item:${esc(it.id)}"`);
-        if (it.note) trk += note(Math.max(p.end, p.start + (it.name.length * 7.2 + 150) / ppd), esc(it.note), 'red');
+          const dl = rivalDelta(doc, it.id, kidsOf(doc, group.id)[0].id, opts);
+          trk += flight(it, text, 'ghost', `data-sel="item:${esc(it.id)}"`) + (dl ? note(tail, esc(dl)) : '');
+          if (dl) tail += (dl.length * 7 + 14) / ppd;
+        } else trk += flight(it, text, '', `data-sel="item:${esc(it.id)}"`);
+        if (it.note) trk += note(tail, esc(it.note), 'red');
       } else if (has && !isOpen) {
-        trk += chain(it, 6, false, '') + (narrow && group ? totAt(extent(it), val(it.id)) : '');
+        trk += chain(it, 6, false, '');
+        if (narrow && group) trk += totAfter(val(it.id));
       } else if (has) {
-        const [lo, hi] = costRange(doc, it.id, opts);
-        trk += pill(p.start, p.end, it.color, `${esc(it.name)}${hide ? '' : lo === hi ? ` · ${money(lo, cur)}` : ` · ${money(lo, cur)}–${money(hi, cur)} depending on picks`}`, 'span', `data-tg="${esc(it.id)}"`, 6, it)
-          + totAt(extent(it), val(it.id));
+        trk += pill(p.start, p.end, it.color, esc(it.name), 'span', `data-sel="item:${esc(it.id)}"`, 6, it) + totAt(extent(it), val(it.id));
       } else {
         // A leaf: a stay, or one option among several.
         const v = val(it.id), r = rateOf(it), site = it.links[0] ? siteOf(it.links[0]) : '';
         const unit = it.unit === 'night' ? '/night' : it.unit === 'day' ? '/day' : '';
         let text = esc(it.name);
         if (group) {
-          const dl = v - val(kidsOf(doc, group.id)[0].id);
-          text = `${site ? `${esc(site)} · ` : ''}${r !== undefined && !hide ? `${money(r, cur)}${unit}` : esc(it.name)}${hide ? '' : picked ? ` · ${money(v, cur)}` : dl ? ` · ${dl > 0 ? '+' : '−'}${money(Math.abs(dl), cur)}` : ''}`;
+          const dl = rivalDelta(doc, it.id, kidsOf(doc, group.id)[0].id, opts);
+          text = `${site ? `${esc(site)} · ` : ''}${r !== undefined && !hide ? `${money(r, cur)}${unit}` : esc(it.name)}${hide ? '' : picked ? ` · ${money(v, cur)}` : dl ? ` · ${esc(dl)}` : ''}`;
         } else if (r !== undefined && !hide) text += ` · ${money(r, cur)}${unit}`;
         trk += pill(p.start, p.end, it.color, `${arrival(it) ? '✈ ' : ''}${text}`, `${picked ? '' : 'ghost'} ${it.committed ? '' : 'opt'}${typeOf(it) === 'event' ? ' ev' : ''}`, `data-sel="item:${esc(it.id)}"`, 6, it);
       }
-      rows.push({ dep, h, lab, trk, tint: dep ? tint : undefined });
+      rows.push({ dep, h, lab, labAttrs, trk, tint: dep ? tint : undefined });
       if (!isOpen) return;
       kids.forEach((k, i) => visit(k, dep + 1, it.kind === 'group' ? it : undefined, i, dep ? tint : k.color));
     };
@@ -471,14 +585,14 @@ export class Lanes {
 
     this.lean.innerHTML = leanBar(this.app);
     this.slider.value = String(toSlider(ppd, min));
-    this.hint.innerHTML = `${narrow
-      ? 'Pinch to zoom. Tap a row\'s arrow or a bubble to open it, a number to make that option the pick, a name to see or edit it. Drag a bubble\'s ends to change its dates.'
-      : 'Ctrl+scroll or pinch the trackpad to zoom. Tap a row\'s arrow or a bubble to open it, a number to make that option the pick, a name to see or edit it. Drag a bubble\'s ends to change its dates.'}${miss.length ? ' <b class="ln-miss-k">!</b> marks a change of place with no transport.' : ''}`;
+    if (!this.hintSeen) {
+      this.hint.innerHTML = `<span>${narrow ? 'Pinch to zoom.' : 'Ctrl+scroll or pinch the trackpad to zoom.'} Tap a name to open or close its row, a bubble to see or edit it, a number to make that option the pick. Drag a bubble's ends to change its dates.${miss.length ? ' <b class="ln-miss-k">!</b> marks a change of place with no transport.' : ''}</span><button class="ln-hint-x" aria-label="Hide this help">×</button>`;
+    }
     // The axis and gridlines are drawn for the visible window by drawAxis().
     this.sc.innerHTML = `<div class="ln-grid" style="--L:${L}px;width:${L + W}px">
   <div class="ln-shade" aria-hidden="true"></div>
-  <div class="ln-row ln-ax"><div class="ln-lab"><small class="ln-scale"></small></div><div class="ln-trk" style="width:${W}px"></div></div>
-  ${rows.map((r) => `<div class="ln-row d${Math.min(r.dep, 3)}" style="height:${r.h}px${r.tint ? `;--t:var(--c-${r.tint})` : ''}"><div class="ln-lab" style="--dep:${r.dep}">${r.lab}</div><div class="ln-trk" style="width:${W}px">${r.trk}</div></div>`).join('')}
+  <div class="ln-row ln-ax"><div class="ln-lab"><small class="ln-scale"></small><i class="ln-rsz" title="Drag to widen the names; double-click to fit them" aria-hidden="true"></i></div><div class="ln-trk" style="width:${W}px"></div></div>
+  ${rows.map((r) => `<div class="ln-row d${Math.min(r.dep, 3)}" style="height:${r.h}px${r.tint ? `;--t:var(--c-${r.tint})` : ''}"><div class="ln-lab${r.labAttrs ? ' tg' : ''}" style="--dep:${r.dep}"${r.labAttrs}>${r.lab}</div><div class="ln-trk" style="width:${W}px">${r.trk}</div></div>`).join('')}
 </div>`;
     if (this.drawn) this.sc.scrollLeft = (left - d0) * ppd;
     this.geo = { d0, d1, ppd, L, min, vw };
