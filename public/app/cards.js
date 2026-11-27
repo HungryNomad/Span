@@ -10,7 +10,7 @@
  */
 import { ancestors, fmt, hhmm, kidsOf, layout, money, pick, setRank, siteOf, total } from './model.js';
 import { legsOf, rivalsOf, stopsOf } from './places.js';
-import { forkOf, rateOf, totalIfPicked, valueOf } from './trip.js';
+import { forkOf, rateOf, ratesText, rivalDelta, valueOf } from './trip.js';
 import { esc } from './ui.js';
 
 /** @typedef {import('./ui.js').App} App */
@@ -43,8 +43,6 @@ export class Cards {
     const { doc, optional, filter } = this.app, cur = doc.currency, at = layout(doc), opts = { optional, filter, at };
     /** Money, or nothing when costs are hidden. */
     const hide = filter === 'none', $$ = (/** @type {number} */ n) => (hide ? '' : money(n, cur));
-    /** A signed difference, or nothing. */
-    const delta = (/** @type {number} */ d) => (hide || !d ? '' : `${d > 0 ? '+' : '−'}${money(Math.abs(d), cur)}`);
     const { stops, before } = stopsOf(doc, at, optional), fork = forkOf(doc);
 
     /**
@@ -54,9 +52,9 @@ export class Cards {
     const rivals = (it, what) => {
       const r = rivalsOf(doc, it);
       if (!r) return '';
-      const v = valueOf(doc, it.id, opts), k = `r:${r.group.id}`;
+      const k = `r:${r.group.id}`;
       const rows = r.options.slice(1).map((o) => `<div class="cd-alt"><div><b>${esc(o.name)}</b><small>${o.links[0] ? `${esc(siteOf(o.links[0]))} · ` : ''}${rateOf(o) !== undefined && !hide ? `${money(/** @type {number} */ (rateOf(o)), cur)}${o.unit === 'night' ? '/night' : ''}` : esc(o.note ?? '')}</small></div>
-<span class="mono">${delta(valueOf(doc, o.id, opts) - v)}</span><button class="btn" data-pick="${esc(o.id)}">Pick</button></div>`).join('');
+<span class="mono">${esc(rivalDelta(doc, o.id, it.id, opts))}</span><button class="btn" data-pick="${esc(o.id)}">Pick</button></div>`).join('');
       return `<details data-k="${esc(k)}"${this.shown.has(k) ? ' open' : ''}><summary>1 of ${r.options.length} ${what} · see the others</summary>${rows}</details>`;
     };
 
@@ -72,8 +70,8 @@ export class Cards {
       if (forkShown || !fork || !ancestors(doc, it).some((a) => a.id === fork.id)) return '';
       forkShown = true;
       const trips = kidsOf(doc, fork.id).map((k, i) => `<button class="cd-trip${i === 0 ? ' on' : ''}" style="--c:var(--c-${k.color})" data-pick="${esc(k.id)}" aria-pressed="${i === 0}">
-  <b>${i === 0 ? '★ ' : ''}${esc(k.name)}</b><small>${legsOf(doc, k.id).map(esc).join(' → ')}</small>${hide ? '' : `<span class="mono">${money(totalIfPicked(doc, k.id, opts), cur)}</span>`}</button>`).join('');
-      return `<section class="cd cd-fork"><p class="k">Still deciding</p><h3>${esc(fork.name)}</h3><div class="cd-trips">${trips}</div><p class="hint">Tap a trip to plan with it. Totals are the whole plan with that trip.</p></section>`;
+  <b>${i === 0 ? '★ ' : ''}${esc(k.name)}</b><small>${legsOf(doc, k.id).map(esc).join(' → ')}</small>${hide ? '' : `<span class="mono">${money(valueOf(doc, k.id, opts), cur)}</span>`}</button>`).join('');
+      return `<section class="cd cd-fork"><p class="k">Still deciding</p><h3>${esc(fork.name)}</h3><div class="cd-trips">${trips}</div><p class="hint">Tap a trip to plan with it. Each total is that trip on its own.</p></section>`;
     };
     /** Boarding-pass strips, with the choice card ahead of the first one inside the fork. */
     const moves = (/** @type {import('./trip.js').Hop[]} */ hs) => hs.map((h) => forkCard(h.item) + pass(h)).join('');
@@ -88,9 +86,9 @@ export class Cards {
       prevEnd = Math.max(prevEnd ?? -Infinity, st.end);
       const color = st.stays[0].item.color;
       const stays = st.stays.map((q) => {
-        const r = rateOf(q.item);
+        const r = ratesText(doc, q.item);
         return `<div class="cd-stay"><button class="lk" data-sel="item:${esc(q.item.id)}">${esc(q.item.name)}</button>
-<small>${Math.round(q.end - q.start)} nights${r !== undefined && !hide ? ` · ${money(r, cur)}/night` : ''}</small><span class="mono">${$$(valueOf(doc, q.item.id, opts))}</span>${rivals(q.item, 'places')}</div>`;
+<small>${Math.round(q.end - q.start)} nights${r && !hide ? ` · ${esc(r)}` : ''}</small><span class="mono">${$$(valueOf(doc, q.item.id, opts))}</span>${rivals(q.item, 'places')}</div>`;
       }).join('');
       html += `<section class="cd" style="--c:var(--c-${color})"><p class="k">${fmt(st.start, { weekday: 'short' })} – ${fmt(st.end, { weekday: 'short' })}</p>
 <h3>${esc(st.name)} <small>${Math.round(st.end - st.start)} nights</small></h3>${stays}</section>`;

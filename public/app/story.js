@@ -11,7 +11,7 @@
 import { imageUrl } from './api.js';
 import { ancestors, fmt, hhmm, kidsOf, layout, money, pick, setRank, siteOf, total } from './model.js';
 import { legsOf, rivalsOf, stopsOf } from './places.js';
-import { forkOf, rateOf, totalIfPicked, valueOf } from './trip.js';
+import { forkOf, ratesText, rivalDelta, valueOf } from './trip.js';
 import { esc } from './ui.js';
 
 /** @typedef {import('./ui.js').App} App */
@@ -49,7 +49,7 @@ export class Story {
     const forkCh = (/** @type {import('./model.js').Item} */ it) => {
       if (forkShown || !fork || !ancestors(doc, it).some((a) => a.id === fork.id)) return '';
       forkShown = true;
-      const trips = kidsOf(doc, fork.id).map((k, i) => `<button class="st-trip${i === 0 ? ' on' : ''}" style="--c:var(--c-${k.color})" data-pick="${esc(k.id)}" aria-pressed="${i === 0}"><b>${i === 0 ? '★ ' : ''}${esc(k.name)}</b><span>${legsOf(doc, k.id).map(esc).join(' → ')}</span>${hide ? '' : `<em>${money(totalIfPicked(doc, k.id, opts), cur)} in all</em>`}</button>`).join('');
+      const trips = kidsOf(doc, fork.id).map((k, i) => `<button class="st-trip${i === 0 ? ' on' : ''}" style="--c:var(--c-${k.color})" data-pick="${esc(k.id)}" aria-pressed="${i === 0}"><b>${i === 0 ? '★ ' : ''}${esc(k.name)}</b><span>${legsOf(doc, k.id).map(esc).join(' → ')}</span>${hide ? '' : `<em>${money(valueOf(doc, k.id, opts), cur)} for the trip</em>`}</button>`).join('');
       return `<section class="st-ch st-fork"><p class="st-k">The fork</p><h3>${esc(fork.name)}</h3><p>Nothing's decided yet. The story below follows the starred trip; tap another to read that one instead.</p><div class="st-trips">${trips}</div></section>`;
     };
     /** Boarding-pass stubs, with the fork's chapter ahead of the first one inside the fork. */
@@ -67,16 +67,16 @@ export class Story {
       const color = st.stays[0].item.color, nights = Math.round(st.end - st.start);
       let cost = 0;
       const paras = st.stays.map((q) => {
-        const it = q.item, r = rateOf(it), v = valueOf(doc, it.id, opts), rv = rivalsOf(doc, it);
+        const it = q.item, r = ratesText(doc, it), v = valueOf(doc, it.id, opts), rv = rivalsOf(doc, it);
         cost += v;
         const alts = rv ? rv.options.slice(1).map((o) => {
-          const d = valueOf(doc, o.id, opts) - v;
-          return `<button class="lk" data-pick="${esc(o.id)}">${esc(o.name)}</button>${hide || !d ? '' : ` (${d > 0 ? '+' : '−'}${money(Math.abs(d), cur)})`}`;
+          const d = rivalDelta(doc, o.id, it.id, opts);
+          return `<button class="lk" data-pick="${esc(o.id)}">${esc(o.name)}</button>${d ? ` (${esc(d)})` : ''}`;
         }) : [];
         const links = it.links.map((u) => `<a class="st-link" href="${esc(u)}" target="_blank" rel="noopener">${esc(siteOf(u))}</a>`).join('');
         const pics = it.images.slice(0, 4).map((id) => `<img src="${imageUrl(id, true)}" alt="Picture of ${esc(it.name)}" loading="lazy">`).join('');
         const nn = Math.round(q.end - q.start);
-        return `<p>${nn} night${nn === 1 ? '' : 's'} at <button class="lk" data-sel="item:${esc(it.id)}">${esc(it.name)}</button>${r !== undefined && !hide ? `, ${money(r, cur)} a night` : ''}.${alts.length ? ` Or ${alts.join(', or ')}.` : ''}${it.committed ? '' : ' <em>Maybe.</em>'}</p>
+        return `<p>${nn} night${nn === 1 ? '' : 's'} at <button class="lk" data-sel="item:${esc(it.id)}">${esc(it.name)}</button>${r && !hide ? `, ${esc(r)}` : ''}.${alts.length ? ` Or ${alts.join(', or ')}.` : ''}${it.committed ? '' : ' <em>Maybe.</em>'}</p>
 ${it.note ? `<p class="st-note">${esc(it.note)}</p>` : ''}${links ? `<p class="st-links">${links}</p>` : ''}${pics ? `<div class="st-pics">${pics}</div>` : ''}`;
       }).join('');
       body += `<section class="st-ch" style="--c:var(--c-${color})"><p class="st-k">Chapter ${n} · ${fmt(st.start)} – ${fmt(st.end)}</p>

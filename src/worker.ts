@@ -11,12 +11,12 @@ interface PlanSummary {
   id: string;
   name: string;
   updated_at: number;
+  created_at: number;
 }
 
 /** Full plan row; `body` is the plan document as stored JSON text. */
 interface PlanRow extends PlanSummary {
   body: string;
-  created_at: number;
 }
 
 /** Request body accepted by `POST` and `PUT /api/plans`. */
@@ -108,7 +108,7 @@ const health: Handler = async (_req, env) => {
 /** `GET /api/plans`: lists plans, most recently updated first. */
 const listPlans: Handler = async (_req, env) => {
   const { results } = await env.DB
-    .prepare("SELECT id, name, updated_at FROM plans ORDER BY updated_at DESC")
+    .prepare("SELECT id, name, updated_at, created_at FROM plans ORDER BY updated_at DESC")
     .all<PlanSummary>();
   return json(results);
 };

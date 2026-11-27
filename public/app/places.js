@@ -7,8 +7,8 @@
  *
  * @module
  */
-import { ancestors, byId, isMoment, kidsOf, subtree, typeOf } from './model.js';
-import { hops, sleeps } from './trip.js';
+import { ancestors, byId, fmt, isMoment, kidsOf, layout, subtree, typeOf } from './model.js';
+import { forkOf, hops, sleeps, withPick } from './trip.js';
 
 /** @typedef {import('./model.js').PlanDoc} PlanDoc */
 /** @typedef {import('./model.js').Item} Item */
@@ -211,4 +211,70 @@ export function missingMoves(doc, at, optional) {
  */
 export function moveParent(doc, stay) {
   return ancestors(doc, stay).find((a) => a.kind === 'item')?.id;
+}
+
+/**
+ * Something that happens after a fixed window (a visa) has closed, in a
+ * place the window covers.
+ * @typedef {object} PastWindow
+ * @property {Item} window The window.
+ * @property {Item} item The stay or move that's too late.
+ * @property {number} day Day it happens (a stay's last morning, a move's day).
+ * @property {string} text e.g. "KHH → SGN on Tue, Jan 19 is after Vietnam e-visa ends Sun, Jan 17".
+ * @property {string} [trip] The fork option it's in, when that trip isn't the pick.
+ */
+
+/**
+ * Items a window speaks for: everything under the window's parent, without
+ * going into either/or groups (those choose somewhere else to go).
+ * @param {PlanDoc} doc
+ * @param {Item} w
+ * @returns {Set<string>}
+ */
+function homeOf(doc, w) {
+  const out = new Set(), todo = kidsOf(doc, w.parent);
+  for (let k = todo.shift(); k; k = todo.shift()) {
+    if (k.kind === 'group' || out.has(k.id)) continue;
+    out.add(k.id);
+    todo.push(...kidsOf(doc, k.id));
+  }
+  return out;
+}
+
+/**
+ * Stays and moves that fall after a window ends, in places the window
+ * covers: the places of the stays beside it (see {@link homeOf}) that begin
+ * inside it. A stay is too late
+ * when you'd still be there the morning after the window's last day; a move
+ * is too late when it arrives in a covered place after that day. Checks the
+ * picked route and, for the plan's fork, every other trip as if picked.
+ * @param {PlanDoc} doc
+ * @param {boolean} optional
+ * @returns {PastWindow[]}
+ */
+export function pastWindows(doc, optional) {
+  const fork = forkOf(doc), alts = fork ? kidsOf(doc, fork.id).slice(1) : [];
+  /** @type {PastWindow[]} */
+  const out = [];
+  for (const [d, trip] of /** @type {[PlanDoc, string | undefined][]} */ ([[doc, undefined], ...alts.map((k) => [withPick(doc, k.id), k.name])])) {
+    const at = layout(d), { stops } = stopsOf(d, at, optional);
+    for (const w of d.items.filter((it) => it.kind === 'window')) {
+      const p = /** @type {Placed} */ (at.get(w.id)), last = Math.ceil(p.end) - 1;
+      const home = homeOf(d, w);
+      const covered = new Set(stops.filter((s) => s.sure && s.start >= p.start && s.start <= last && s.stays.some((q) => home.has(q.item.id))).map((s) => s.name));
+      if (!covered.size) continue;
+      const ends = `${w.name} ends ${fmt(last, { weekday: 'short' })}`;
+      for (const s of stops) {
+        if (!covered.has(s.name) || Math.floor(s.end) <= last) continue;
+        const item = /** @type {Placed} */ (s.stays.at(-1)).item;
+        out.push({ window: w, item, day: Math.floor(s.end), text: `${s.name} until ${fmt(s.end, { weekday: 'short' })} is after ${ends}`, trip });
+      }
+      for (const h of hops(d, at, optional)) {
+        const to = cityIn(h.to ?? h.label.split(/→|->/).pop() ?? '');
+        if (!to || !covered.has(to.name) || Math.floor(h.at) <= last) continue;
+        out.push({ window: w, item: h.item, day: Math.floor(h.at), text: `${h.label} on ${fmt(h.at, { weekday: 'short' })} is after ${ends}`, trip });
+      }
+    }
+  }
+  return out;
 }

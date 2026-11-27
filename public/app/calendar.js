@@ -7,10 +7,10 @@
  *
  * @module
  */
-import { dateOf, hhmm, layout, money, nowIdx, pick, setRank, total } from './model.js';
+import { COLORS, dateOf, hhmm, layout, money, nowIdx, pick, setRank, total, typeOf } from './model.js';
 import { placeOf } from './places.js';
 import { hops, sleeps } from './trip.js';
-import { leanBar } from './lanes.js';
+import { iconOf, leanBar } from './lanes.js';
 import { esc } from './ui.js';
 
 /** @typedef {import('./ui.js').App} App */
@@ -65,8 +65,24 @@ export class Calendar {
     const fly = new Map();
     for (const h of moves) {
       const d = Math.floor(h.at);
-      fly.set(d, [...(fly.get(d) ?? []), `<button class="cal-fl" data-sel="item:${esc(h.item.id)}">✈ ${esc(h.from && h.to ? `${h.from}→${h.to}` : h.label)} ${hhmm((h.at % 1) * 24)}</button>`]);
+      const icon = typeOf(h.item) === 'transport' ? iconOf(h.item) : '✈', full = `${h.label} ${hhmm((h.at % 1) * 24)}`;
+      fly.set(d, [...(fly.get(d) ?? []), `<button class="cal-fl" data-sel="item:${esc(h.item.id)}" title="${esc(full)}" aria-label="${esc(full)}"><b>${icon} ${esc(h.to ?? h.label)}</b><small>${hhmm((h.at % 1) * 24)}</small></button>`]);
     }
+
+    // One colour per place, so two stays in a row in the same trip colour (Taipei, then Tainan) still read apart.
+    /** @type {Map<string, string>} */
+    const tint = new Map();
+    let prevTint = '';
+    for (const s of strokes) {
+      const place = placeOf(doc, s.p.item).name;
+      if (!tint.has(place)) {
+        const taken = new Set([...tint.values()]), own = s.p.item.color;
+        tint.set(place, own !== prevTint && !taken.has(own) ? own : COLORS.find((c) => c !== 'gray' && !taken.has(c) && c !== prevTint) ?? own);
+      }
+      prevTint = /** @type {string} */ (tint.get(place));
+    }
+    /** The colour a stay's stroke is drawn in. */
+    const colorOf = (/** @type {import('./model.js').Item} */ it) => tint.get(placeOf(doc, it).name) ?? it.color;
 
     const today = Math.floor(nowIdx());
     let html = '';
@@ -97,7 +113,7 @@ export class Calendar {
           const place = placeOf(doc, it).name;
           const label = head ? esc(it.name.includes(place) ? it.name : `${place} · ${it.name}`) : b - a >= 3 ? esc(place) : '';
           return `<button class="cal-bar${s.maybe ? ' maybe' : ''}${head ? ' head' : ''}${Math.floor(s.p.end) === b ? ' tail' : ''}" data-sel="item:${esc(it.id)}"
-  style="--c:var(--c-${it.color});left:${((a - w) / 7) * 100}%;width:${((b - a) / 7) * 100}%;--lane:${lane}" title="${esc(it.name)}${s.maybe ? ' (maybe)' : ''}"><span>${s.maybe && head ? 'maybe: ' : ''}${label}</span></button>`;
+  style="--c:var(--c-${colorOf(it)});left:${((a - w) / 7) * 100}%;width:${((b - a) / 7) * 100}%;--lane:${lane}" title="${esc(it.name)}${s.maybe ? ' (maybe)' : ''}"><span>${s.maybe && head ? 'maybe: ' : ''}${label}</span></button>`;
         }).join('');
         const lanes = Math.max(1, ...segs.map((g) => g.lane + 1));
         weeks += `<div class="cal-w" style="--lanes:${lanes}">${cells}<div class="cal-bars">${bars}</div></div>`;
@@ -107,7 +123,7 @@ export class Calendar {
     }
 
     // Legend: each counted stay with nights, and the trip total.
-    const legend = on.map((p) => `<button data-sel="item:${esc(p.item.id)}" style="--c:var(--c-${p.item.color})"><i></i>${esc(placeOf(doc, p.item).name)} <small>${Math.round(p.end - p.start)}n</small></button>`).join('');
+    const legend = on.map((p) => `<button data-sel="item:${esc(p.item.id)}" style="--c:var(--c-${colorOf(p.item)})"><i></i>${esc(placeOf(doc, p.item).name)} <small>${Math.round(p.end - p.start)}n</small></button>`).join('');
     const gaps = [...ring.values()].filter((v) => v === 'gap').length, ovl = [...ring.values()].filter((v) => v === 'ovl').length;
     const sum = filter === 'none' ? '' : `<b class="cal-tot">${money(pick(total(doc, { optional, at }), filter), cur)}</b>`;
     this.el.innerHTML = `${leanBar(this.app)}<div class="cal-legend">${legend}${gaps ? `<span class="cal-key gap">${gaps} unbooked</span>` : ''}${ovl ? `<span class="cal-key ovl">${ovl} double-booked</span>` : ''}${strokes.some((s) => s.maybe) ? '<span class="cal-key maybe">dashed = maybe, not counted</span>' : ''}${sum}</div>

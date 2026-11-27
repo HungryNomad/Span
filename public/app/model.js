@@ -628,11 +628,100 @@ export function canStretch(doc, it) {
 }
 
 /**
+ * Siblings that take up nights beside an item (same unit, not a move or an
+ * event; in a group, its pick), as placed spans. An option of a group is
+ * judged by its group's place among the group's siblings.
+ * @param {PlanDoc} doc
+ * @param {Item} it
+ * @param {Layout} at
+ * @returns {Placed[]}
+ */
+function neighbours(doc, it, at) {
+  const slot = byId(doc, it.parent)?.kind === 'group' ? /** @type {Item} */ (byId(doc, it.parent)) : it;
+  /** The item a sibling's nights come from: itself, or its group's pick. */
+  const body = (/** @type {Item} */ k) => (k.kind === 'group' ? kidsOf(doc, k.id)[0] : k);
+  return kidsOf(doc, slot.parent).filter((k) => {
+    const b = body(k);
+    return k !== slot && k.kind !== 'window' && b?.kind === 'item' && b.unit === it.unit && !isMoment(b) && typeOf(b) !== 'event';
+  }).map((k) => /** @type {Placed} */ (at.get(k.id)));
+}
+
+/**
+ * How far an item's ends may move before it runs into a sibling stay that
+ * keeps its own dates: the latest end of those before it and the earliest
+ * start of those after it. Siblings that follow it (start when it ends)
+ * move with it, so they don't limit the end.
+ * @param {PlanDoc} doc
+ * @param {Item} it
+ * @param {Placed} p Where it sits.
+ * @param {number} [fallback] As given to {@link layout}.
+ * @returns {[number, number]} Earliest start and latest end.
+ */
+function roomFor(doc, it, p, fallback) {
+  if (it.kind === 'window' || it.unit === 'hour') return [-Infinity, Infinity];
+  const at = layout(doc, {}, fallback), slot = byId(doc, it.parent)?.kind === 'group' ? /** @type {Item} */ (byId(doc, it.parent)) : it;
+  const follows = new Set(doc.items.filter((k) => k.after && (k.after === slot.id || k.after === it.id)).map((k) => k.id));
+  let lo = -Infinity, hi = Infinity;
+  for (const q of neighbours(doc, it, at)) {
+    if (q.start < p.start && q.end <= p.start + 1e-9) lo = Math.max(lo, q.end);
+    else if (q.start >= p.end - 1e-9 && !follows.has(q.item.id)) hi = Math.min(hi, q.start);
+  }
+  return [lo, hi];
+}
+
+/**
+ * Removes the nights an item's children book twice: each stay that runs
+ * into the next one is shortened to end when the next begins, or, when it
+ * can't be shortened, the next one starts later. Only children of the same
+ * unit count, as in {@link coverage}.
+ * @param {PlanDoc} doc Mutated in place.
+ * @param {string} id The item whose children overlap.
+ * @param {boolean} optional Count optional children too.
+ * @returns {boolean} Whether anything changed.
+ */
+export function fixOverlaps(doc, id, optional) {
+  let changed = false;
+  for (let guard = 0; guard < 20; guard++) {
+    const at = layout(doc), it = byId(doc, id);
+    if (!it) return changed;
+    const spans = kidsOf(doc, id).filter((k) => {
+      const b = k.kind === 'group' ? kidsOf(doc, k.id)[0] : k;
+      return k.kind !== 'window' && b?.kind === 'item' && b.unit === it.unit && !isMoment(b) && typeOf(b) !== 'event' && (k.kind === 'group' || k.committed || optional);
+    }).map((k) => /** @type {Placed} */ (at.get(k.id))).sort((a, b) => a.start - b.start);
+    const i = spans.findIndex((a, j) => j > 0 && spans[j - 1].end > a.start + 1e-9);
+    if (i < 0) return changed;
+    const a = spans[i - 1], b = spans[i];
+    const moved = setEdge(doc, a.item.id, 'end', b.start) || setEdge(doc, b.item.id, 'start', a.end);
+    if (!moved) return changed;
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * Adds a new item. Outside an either/or group it goes among its siblings
+ * in date order (a group's order is its ranking, so a new option goes last).
+ * @param {PlanDoc} doc Mutated in place.
+ * @param {Item} it
+ */
+export function insertItem(doc, it) {
+  doc.items.push(it);
+  if (byId(doc, it.parent)?.kind === 'group') return;
+  const at = layout(doc), s = /** @type {Placed} */ (at.get(it.id)).start;
+  const sibs = kidsOf(doc, it.parent).filter((k) => k !== it);
+  const next = sibs.find((k) => /** @type {Placed} */ (at.get(k.id)).start > s);
+  if (!next) return;
+  doc.items.pop();
+  doc.items.splice(doc.items.indexOf(next), 0, it);
+}
+
+/**
  * Moves one end of an item to a day, as when dragging a bubble's edge. The
  * end moves the length; the start moves the start and keeps the end, and
  * children timed from the item's start stay where they were. On an either/or
  * group every option changes by the same amount. A length range widens to
- * take the new length.
+ * take the new length. An end stops where a sibling stay with dates of its
+ * own begins or ends, so a drag never books a night twice.
  * @param {PlanDoc} doc Mutated in place.
  * @param {string} id
  * @param {'start' | 'end'} side
@@ -652,13 +741,14 @@ export function setEdge(doc, id, side, day, fallback) {
     k.len = len;
     if (isRanged(k)) { k.minLen = Math.min(k.minLen, len); k.maxLen = Math.max(k.maxLen, len); }
   };
+  const [lo, hi] = roomFor(doc, it, p, fallback);
   if (side === 'end') {
-    const delta = Math.max(d - Math.round(p.end), 1 - shortest);
+    const delta = Math.max(Math.min(d, Math.max(hi, Math.round(p.end))) - Math.round(p.end), 1 - shortest);
     if (!delta) return false;
     for (const k of targets) setLen(k, /** @type {number} */ (k.len) + delta);
     return true;
   }
-  const delta = Math.min(d - Math.floor(p.start), shortest - 1);
+  const delta = Math.min(Math.max(d, Math.min(lo, Math.floor(p.start))) - Math.floor(p.start), shortest - 1);
   if (!delta) return false;
   if (it.start && !it.after) it.start = isoOf(dayOf(it.start) + delta);
   else it.offset += delta;

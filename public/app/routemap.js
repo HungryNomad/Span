@@ -9,7 +9,7 @@
  */
 import { fmt, kidsOf, layout, money, setRank } from './model.js';
 import { cityIn, rivalsOf, stopsOf } from './places.js';
-import { forkOf, valueOf, withPick } from './trip.js';
+import { forkOf, rivalDelta, valueOf, withPick } from './trip.js';
 import { leanBar } from './lanes.js';
 import { esc } from './ui.js';
 
@@ -142,8 +142,8 @@ export class RouteMap {
       const stays = st.stays.map((q) => {
         const r = rivalsOf(doc, q.item), v = valueOf(doc, q.item.id, opts);
         const alts = r ? r.options.slice(1).map((o) => {
-          const d = valueOf(doc, o.id, opts) - v;
-          return `<button class="rm-alt" data-pick="${esc(o.id)}">or ${esc(o.name)}${filter === 'none' || !d ? '' : ` ${d > 0 ? '+' : '−'}${money(Math.abs(d), cur)}`}</button>`;
+          const d = rivalDelta(doc, o.id, q.item.id, opts);
+          return `<button class="rm-alt" data-pick="${esc(o.id)}">or ${esc(o.name)}${d ? ` ${esc(d)}` : ''}</button>`;
         }).join('') : '';
         return `<div class="rm-stay"><button class="lk" data-sel="item:${esc(q.item.id)}">${esc(q.item.name)}</button>${filter === 'none' ? '' : ` <span class="mono">${money(v, cur)}</span>`}${alts}</div>`;
       }).join('');
