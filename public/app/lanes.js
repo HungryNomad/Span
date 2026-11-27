@@ -360,27 +360,33 @@ export class Lanes {
 
     /**
      * An item's children as one chain of bubbles in time order. A move
-     * shows as its icon at the start of the bubble it leads to (so it never
-     * covers a name), or on the line when nothing follows it.
+     * shows as its icon at the start of the bubble that begins the day it
+     * happens (so it never covers a name), or on the line when no bubble
+     * begins that day (a flight home).
      * @param {Item} it @param {number} top @param {boolean} sm @param {string} lead
      */
     const chain = (it, top, sm, lead) => {
       const ks = kidsOf(doc, it.id).filter((k) => k.kind !== 'window').sort((a, b) => P(a.id).start - P(b.id).start);
       if (!ks.length) return bubble(it, top, sm, lead);
-      let first = true, h = '', icons = '';
-      /** @type {Item | undefined} */
-      let hop;
+      /** The move an item is, or the pick of a group of moves. */
+      const hopOf = (/** @type {Item} */ k) => { const pk = k.kind === 'group' ? kidsOf(doc, k.id)[0] : k; return pk && isHop(pk) ? pk : undefined; };
+      const stays = ks.filter((k) => !hopOf(k));
+      /** @type {Map<string, string>} */
+      const icons = new Map();
+      let h = '';
       for (const k of ks) {
-        const pk = k.kind === 'group' ? kidsOf(doc, k.id)[0] : k;
-        if (pk && isHop(pk)) { icons += `${iconOf(pk)} `; hop ??= pk; continue; }
-        const pre = `${first ? lead : ''}${icons}`;
+        const hop = hopOf(k);
+        if (!hop) continue;
+        const day = Math.floor(P(hop.id).start), to = stays.find((s) => Math.floor(P(s.id).start) === day);
+        if (to) icons.set(to.id, `${icons.get(to.id) ?? ''}${iconOf(hop)} `);
+        else h += dot(P(hop.id).start, top + (sm ? 1 : 3), iconOf(hop));
+      }
+      stays.forEach((k, i) => {
+        const pre = `${i === 0 ? lead : ''}${icons.get(k.id) ?? ''}`;
         h += k.kind === 'group' || !kidsOf(doc, k.id).length ? bubble(k, top, sm, pre, true)
           : pill(P(k.id).start, P(k.id).end, k.color, `${pre}${esc(k.name)} · ${nightsTxt(k)}`, `${sm ? 'sm' : ''}`, `data-tg="${esc(it.id)}"`, top, k);
-        first = false;
-        icons = '';
-        hop = undefined;
-      }
-      return hop ? h + dot(P(hop.id).start, top + (sm ? 1 : 3), iconOf(hop)) : h;
+      });
+      return h;
     };
 
     /** @type {Row[]} */
