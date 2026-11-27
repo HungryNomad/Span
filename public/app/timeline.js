@@ -12,6 +12,9 @@ import {
   layout, money, nowIdx, pivotOf, rangeOf, routeLabel, setRank, total, unitText, UNIT_DAYS,
 } from './model.js';
 import { $, drag, esc, heat, PLANE } from './ui.js';
+import { axisMarks, fromSlider, markPreset, PPD_MAX, PRESETS, toSlider, wireZoom, zoomControls } from './zoomkit.js';
+
+export { axisTicks } from './zoomkit.js';
 
 /** @typedef {import('./ui.js').App} App */
 /** @typedef {import('./model.js').Item} Item */
@@ -19,81 +22,12 @@ import { $, drag, esc, heat, PLANE } from './ui.js';
 /** @typedef {import('./model.js').PlanDoc} PlanDoc */
 /** @typedef {{item: Item, depth: number}} Row */
 
-const WD = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MONL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-/** Tick units from finest to coarsest: [unit, count]. */
-const UNITS = /** @type {const} */ ([['h', 1], ['h', 3], ['h', 6], ['h', 12], ['d', 1], ['d', 2], ['w', 1], ['m', 1], ['m', 3], ['y', 1]]);
-/** Days per unit. */
-const SPAN = { h: 1 / 24, d: 1, w: 7, m: 30.44, y: 365.25 };
 /** Row geometry in px. */
 const AXIS = 48, ROW = 44, FARE = 24;
-/** Most zoomed in: 96 px per hour. */
-const PPD_MAX = 24 * 96;
 /** Deepest level that expands in place on desktop (0-based); deeper items drill in. */
 const MAX_OPEN_DEPTH = 1;
 /** Long-press before a touch drag moves a bar, in ms. */
 const HOLD_MS = 350;
-/** Zoom presets: visible span in days. */
-const PRESETS = { Hours: 1, Days: 9, Weeks: 42, Months: 124, Year: 365 };
-
-/**
- * First-of-month day indices in [a, b], every `step` months (aligned to January).
- * @param {number} a
- * @param {number} b
- * @param {number} [step]
- * @returns {{i: number, y: number, m: number}[]}
- */
-function monthStarts(a, b, step = 1) {
-  const d = dateOf(a), out = [];
-  let y = d.getUTCFullYear(), m = d.getUTCMonth();
-  m = Math.floor(m / step) * step;
-  for (;;) {
-    const i = Date.UTC(y, m, 1) / 864e5;
-    if (i > b) break;
-    if (i >= a) out.push({ i, y: new Date(i * 864e5).getUTCFullYear(), m: new Date(i * 864e5).getUTCMonth() });
-    m += step;
-    if (m > 11) y += Math.floor(m / 12), m %= 12;
-  }
-  return out;
-}
-
-/**
- * Picks a tick unit for the zoom level and lists labelled ticks in [a, b].
- * @param {number} a First visible day.
- * @param {number} b Last visible day.
- * @param {number} ppd Pixels per day.
- * @returns {{k: string, n: number, minor: [number, string][], major: [number, string][]}}
- */
-export function axisTicks(a, b, ppd) {
-  const [k, n] = UNITS.find(([u, c]) => SPAN[u] * c * ppd >= 58) ?? UNITS[UNITS.length - 1];
-  /** @type {[number, string][]} */
-  const minor = [];
-  /** @type {[number, string][]} */
-  const major = [];
-  const months = () => monthStarts(a, b).forEach((s) => major.push([s.i, `${MONL[s.m]} ${s.y}`]));
-  if (k === 'h') {
-    for (let H = Math.floor(a * 24 / n) * n; H / 24 <= b; H += n) minor.push([H / 24, `${String(((H % 24) + 24) % 24).padStart(2, '0')}:00`]);
-    for (let i = Math.floor(a); i <= b; i++) major.push([i, fmt(i, { weekday: 'short' })]);
-  } else if (k === 'd' || k === 'w') {
-    let i = Math.floor(a);
-    if (k === 'w') while (dateOf(i).getUTCDay() !== 1) i++;
-    else if (n === 2 && i % 2) i++;
-    const wide = ppd * n >= 76;
-    for (; i <= b; i += k === 'w' ? 7 : n) {
-      const dt = dateOf(i);
-      minor.push([i, k === 'w' ? fmt(i) : (wide ? WD[dt.getUTCDay()] + ' ' : '') + dt.getUTCDate()]);
-    }
-    months();
-  } else if (k === 'm') {
-    monthStarts(a, b, n).forEach((s) => minor.push([s.i, MON[s.m]]));
-    monthStarts(a, b, 12).forEach((s) => major.push([s.i, String(s.y)]));
-  } else {
-    monthStarts(a, b, 12).forEach((s) => minor.push([s.i, String(s.y)]));
-  }
-  return { k, n, minor, major };
-}
-
 
 /**
  * Rows the timeline shows, in order: the whole plan's top level (or the
@@ -196,8 +130,7 @@ export class Timeline {
     this.rows = /** @type {Row[]} */ ([]);
     el.innerHTML = `
 <div class="tools">
-  <div class="seg" id="g-pre" role="group" aria-label="Zoom presets">${Object.keys(PRESETS).map((p) => `<button data-p="${p}">${p}</button>`).join('')}</div>
-  <label class="zoom"><span class="mono" aria-hidden="true">−</span><input id="g-zoom" type="range" min="0" max="1000" aria-label="Zoom level"><span class="mono" aria-hidden="true">+</span></label>
+  ${zoomControls()}
   <span class="hint" id="g-hint"></span>
 </div>
 <nav class="crumbs" id="g-crumbs" aria-label="Where you are" hidden></nav>
@@ -215,8 +148,8 @@ export class Timeline {
     this.bars = $('#g-bars', el);
     this.labels = $('#g-labels', el);
     this.crumbs = $('#g-crumbs', el);
-    this.zoom = /** @type {HTMLInputElement} */ ($('#g-zoom', el));
-    this.pre = $('#g-pre', el);
+    this.zoom = /** @type {HTMLInputElement} */ ($('[data-zs]', el));
+    this.pre = $('[data-zp]', el);
     /** When true, the next render with a measurable width jumps to the Months preset. */
     this.fresh = true;
     /** Preset picked last, until you zoom by hand. */
@@ -234,27 +167,10 @@ export class Timeline {
     this.zoom.addEventListener('input', () => this.zoomTo(this.fromSlider(+this.zoom.value)));
     this.pre.addEventListener('click', (e) => {
       const b = /** @type {HTMLElement} */ (e.target).closest('button');
-      if (b) this.preset(/** @type {keyof typeof PRESETS} */ (b.dataset.p));
+      if (b) this.preset(/** @type {import('./zoomkit.js').Preset} */ (b.dataset.p));
     });
-    this.sc.addEventListener('wheel', (e) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-      this.zoomTo(this.ppd * Math.exp(-e.deltaY * 0.01), e.clientX - this.sc.getBoundingClientRect().left);
-    }, { passive: false });
-
-    /** @type {{d: number, p: number, cx: number} | null} */
-    let pinch = null;
-    const dist = (/** @type {TouchList} */ t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-    this.sc.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 2) {
-        pinch = { d: dist(e.touches), p: this.ppd, cx: (e.touches[0].clientX + e.touches[1].clientX) / 2 - this.sc.getBoundingClientRect().left };
-      }
-    }, { passive: true });
-    this.sc.addEventListener('touchmove', (e) => {
-      if (this.touchDrag) e.preventDefault();
-      else if (pinch && e.touches.length === 2) { e.preventDefault(); this.zoomTo(pinch.p * dist(e.touches) / pinch.d, pinch.cx); }
-    }, { passive: false });
-    this.sc.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; });
+    wireZoom(this.sc, () => this.ppd, (p, anchor) => this.zoomTo(p, anchor));
+    this.sc.addEventListener('touchmove', (e) => { if (this.touchDrag) e.preventDefault(); }, { passive: false });
     this.bars.addEventListener('contextmenu', (e) => { if (/** @type {HTMLElement} */ (e.target).closest('.bar')) e.preventDefault(); });
 
     this.bars.addEventListener('pointerdown', (e) => {
@@ -286,8 +202,6 @@ export class Timeline {
         const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
         const it = byId(this.app.doc, t.dataset.id);
         if (step && it?.len !== undefined) { e.preventDefault(); this.app.setLen(it.id, it.len + step * (it.unit === 'hour' ? 0.25 : 1)); }
-      } else if (t === this.sc && (e.key === '+' || e.key === '-' || e.key === '=')) {
-        this.zoomTo(this.ppd * (e.key === '-' ? 0.7 : 1.4));
       }
     });
   }
@@ -382,13 +296,13 @@ export class Timeline {
    * @param {number} p Pixels per day.
    * @returns {number}
    */
-  toSlider(p) { return Math.round(1000 * Math.log(p / this.ppdMin()) / Math.log(PPD_MAX / this.ppdMin())); }
+  toSlider(p) { return toSlider(p, this.ppdMin()); }
   /**
    * Zoom level for a slider position.
    * @param {number} v 0..1000.
    * @returns {number} Pixels per day.
    */
-  fromSlider(v) { return this.ppdMin() * Math.pow(PPD_MAX / this.ppdMin(), v / 1000); }
+  fromSlider(v) { return fromSlider(v, this.ppdMin()); }
   /**
    * X position of a (fractional) day.
    * @param {number} i Day index.
@@ -413,7 +327,7 @@ export class Timeline {
   /**
    * Jumps to a preset span, centred on what matters at that scale: the
    * departure day for short spans, everything in view for long ones.
-   * @param {keyof typeof PRESETS} name
+   * @param {import('./zoomkit.js').Preset} name
    */
   preset(name) {
     const { doc } = this.app, at = layout(doc), shown = this.viewPlaced(at);
@@ -591,32 +505,13 @@ export class Timeline {
     const p = this.ppd, sl = this.sc.scrollLeft, w = this.w();
     if (!p) return;
     const a = Math.max(this.d0, sl / p + this.d0 - 1), b = Math.min(this.d1, (sl + w) / p + this.d0 + 1);
-    const { k, n, minor, major } = axisTicks(a, b, p);
-    let ax = '', gr = '';
-    if ((k === 'h' || k === 'd') && p >= 14) {
-      for (let i = Math.floor(a); i <= b; i++) {
-        const wd = dateOf(i).getUTCDay();
-        if (wd === 0 || wd === 6) gr += `<i class="we" style="left:${this.x(i)}px;width:${p}px"></i>`;
-      }
-    }
-    minor.forEach(([i, lab]) => {
-      const X = this.x(i);
-      ax += `<i class="tk" style="left:${X}px"></i><span class="tkl" style="left:${X + 4}px">${lab}</span>`;
-      gr += `<i class="gl" style="left:${X}px"></i>`;
-    });
-    major.forEach(([i, lab], j) => {
-      const X = this.x(i), next = major[j + 1] ? this.x(major[j + 1][0]) : Infinity;
-      ax += `<span class="mj" style="left:${Math.max(X + 6, Math.min(sl + 6, next - 120))}px">${lab}</span>`;
-      gr += `<i class="gl m" style="left:${X}px"></i>`;
-    });
-    ax += `<span class="todaytag" style="left:${this.x(nowIdx())}px">Today</span>`;
+    const { axis, grid, scale } = axisMarks(a, b, p, (i) => this.x(i), sl);
+    let gr = grid;
     for (let r = 1; r <= this.rows.length; r++) gr += `<i class="hl" style="top:${r * ROW}px"></i>`;
-    this.axis.innerHTML = ax;
+    this.axis.innerHTML = axis;
     this.grid.innerHTML = gr;
-    const name = { h: 'Hours', d: 'Days', w: 'Weeks', m: n === 3 ? 'Quarters' : 'Months', y: 'Years' }[k] ?? '';
-    const scale = document.getElementById('g-scale');
-    if (scale) scale.textContent = name;
-    const match = this.active ?? { Hours: 'Hours', Days: 'Days', Weeks: 'Weeks', Months: 'Months', Quarters: 'Year', Years: 'Year' }[name];
-    this.pre.querySelectorAll('button').forEach((btn) => btn.setAttribute('aria-pressed', String(btn.dataset.p === match)));
+    const label = document.getElementById('g-scale');
+    if (label) label.textContent = scale;
+    markPreset(this.pre, this.active, scale);
   }
 }

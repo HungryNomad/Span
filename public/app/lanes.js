@@ -5,18 +5,19 @@
  * forks (groups whose options are whole trips) collapse to one chain of
  * bubbles per option with its total. Open a row to see what's inside, and
  * tap an option's number to make it the pick. Zooms from hours to years
- * (presets, pinch or Ctrl+scroll), and a bubble's ends drag to change dates.
+ * with the zoom timeline's controls (presets, slider, pinch, Ctrl+scroll),
+ * and a bubble's ends drag to change dates.
  * Transport and events draw as tags with their icon, and a change of place
  * with nothing booked between gets a red mark.
  *
  * @module
  */
 import {
-  ancestors, canStretch, clamp, coverage, dateOf, fmt, hhmm, isMoment, kidsOf, layout, MODES, money, nowIdx, setEdge, setRank,
+  ancestors, canStretch, clamp, coverage, fmt, hhmm, isMoment, kidsOf, layout, MODES, money, nowIdx, pivotOf, setEdge, setRank,
   siteOf, typeOf, unitsOf, unitText,
 } from './model.js';
 import { missingMoves } from './places.js';
-import { axisTicks } from './timeline.js';
+import { axisMarks, fromSlider, markPreset, PPD_MAX, PRESETS, toSlider, wireZoom, zoomControls } from './zoomkit.js';
 import { costRange, forkOf, isFork, rateOf, totalIfPicked, valueOf } from './trip.js';
 import { drag, esc } from './ui.js';
 
@@ -26,15 +27,12 @@ import { drag, esc } from './ui.js';
 /** @typedef {import('./model.js').Layout} Layout */
 /** @typedef {{dep: number, h: number, lab: string, trk: string, tint?: string}} Row */
 
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** Row height, and height of one option line in a closed fork. */
 const ROW = 36, LINE = 28;
-/** Pixels per day when fitting the plan: least and most. */
+/** Pixels per day when a plan first opens fitted: least and most. */
 const FIT_MIN = 9, FIT_MAX = 24;
-/** Most zoomed in (60 px an hour) and the least ever (a few years across a phone). */
-const PPD_MAX = 24 * 60, PPD_MIN = 0.2;
-/** Zoom presets: days in view. */
-const PRESETS = { Day: 1, Week: 7, Month: 31, Year: 365 };
+/** Days in view when fully zoomed out, at least (as in the zoom timeline). */
+const MIN_SPAN = 400;
 /** Narrowest bubble that gets drag handles on its ends. */
 const HANDLES_MIN = 30;
 
@@ -86,27 +84,33 @@ export class Lanes {
     this.app = app;
     /** Rows opened in this view, per plan; null until the plan's first render. */
     this.open = /** @type {Set<string> | null} */ (null);
-    const z = load('span-lanes-zoom');
-    /** `fit`, or pixels per day ("days" was the old fixed zoom). */
-    this.zoom = /** @type {'fit' | number} */ (z === 'days' ? FIT_MAX : Number(z) > 0 ? Number(z) : 'fit');
+    /** `fit` (fit the plan, as when it first opens) or pixels per day. */
+    this.zoom = /** @type {'fit' | number} */ ('fit');
     /** Preset picked last, until you zoom by hand. */
     this.active = /** @type {string | null} */ (null);
-    /** Geometry of the last render: first day, pixels per day, label width. */
-    this.geo = { d0: 0, ppd: FIT_MAX, L: 214 };
+    /** Geometry of the last render: first and last day, pixels per day, label width, and the most zoomed out. */
+    this.geo = { d0: 0, d1: 1, ppd: FIT_MAX, L: 214, min: 1 };
     /** Day to keep at a pixel of the track on the next render (after a zoom). */
     this.keep = /** @type {{day: number, ax: number} | null} */ (null);
+    /** Pending zoom frame, so a pinch draws at most once per frame. */
+    this.raf = 0;
     /** Set briefly after a drag so the trailing click doesn't select. */
     this.justDragged = false;
     /** Whether the grid has been drawn (so there's a scroll position to keep). */
     this.drawn = false;
-    el.innerHTML = '<div class="ln-top"></div><p class="ln-hint"></p><div class="ln-scroll"></div><div class="ln-tip" role="status" hidden></div>';
-    this.top = /** @type {HTMLElement} */ (el.querySelector('.ln-top'));
+    el.innerHTML = `<div class="ln-lean"></div>
+<div class="tools ln-tools">${zoomControls()}<div class="seg ln-all"><button data-all="1">Expand all</button><button data-all="0">Collapse all</button></div></div>
+<p class="ln-hint"></p><div class="ln-scroll"></div><div class="ln-tip" role="status" hidden></div>`;
+    this.lean = /** @type {HTMLElement} */ (el.querySelector('.ln-lean'));
+    this.hint = /** @type {HTMLElement} */ (el.querySelector('.ln-hint'));
+    this.pre = /** @type {HTMLElement} */ (el.querySelector('[data-zp]'));
+    this.slider = /** @type {HTMLInputElement} */ (el.querySelector('[data-zs]'));
     this.sc = /** @type {HTMLElement} */ (el.querySelector('.ln-scroll'));
     this.tip = /** @type {HTMLElement} */ (el.querySelector('.ln-tip'));
     this.wire();
   }
 
-  /** Attaches clicks, zoom gestures and edge drags (all delegated, since content is redrawn). */
+  /** Attaches clicks, the zoom controls and gestures, and edge drags (delegated, since content is redrawn). */
   wire() {
     const { el, sc } = this;
     el.addEventListener('click', (e) => this.click(/** @type {HTMLElement} */ (e.target)));
@@ -114,21 +118,10 @@ export class Lanes {
       const h = /** @type {HTMLElement} */ (e.target).closest('.ln-h');
       if (h instanceof HTMLElement && e.button === 0) this.edge(e, h);
     });
-    sc.addEventListener('wheel', (e) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      this.zoomTo(this.geo.ppd * Math.exp(-e.deltaY * 0.01), e.clientX - sc.getBoundingClientRect().left);
-    }, { passive: false });
-    /** @type {{d: number, p: number, cx: number} | null} */
-    let pinch = null;
-    const dist = (/** @type {TouchList} */ t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-    sc.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 2) pinch = { d: dist(e.touches), p: this.geo.ppd, cx: (e.touches[0].clientX + e.touches[1].clientX) / 2 - sc.getBoundingClientRect().left };
-    }, { passive: true });
-    sc.addEventListener('touchmove', (e) => {
-      if (pinch && e.touches.length === 2) { e.preventDefault(); this.zoomTo(pinch.p * dist(e.touches) / pinch.d, pinch.cx); }
-    }, { passive: false });
-    sc.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; });
+    this.slider.addEventListener('input', () => this.zoomTo(fromSlider(+this.slider.value, this.geo.min)));
+    wireZoom(sc, () => this.geo.ppd, (p, anchor) => this.zoomTo(p, anchor));
+    let raf = 0;
+    sc.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => this.drawAxis()); }, { passive: true });
   }
 
   /** @returns {number} Width of the visible track (the scroller minus the labels). */
@@ -145,7 +138,8 @@ export class Lanes {
   }
 
   /**
-   * Zooms while keeping the day under `anchor` where it is.
+   * Zooms while keeping the day under `anchor` where it is. Redraws on the
+   * next frame, so a fast pinch draws once per frame.
    * @param {number} ppd New pixels per day.
    * @param {number} [anchor] Pixel offset inside the scroller (the track's middle by default).
    */
@@ -153,32 +147,26 @@ export class Lanes {
     const { d0, L } = this.geo, w = this.view();
     const ax = anchor === undefined || anchor < L ? w / 2 : anchor - L;
     this.keep = { day: (this.sc.scrollLeft + ax) / this.geo.ppd + d0, ax };
-    this.zoom = clamp(ppd, PPD_MIN, PPD_MAX);
+    this.zoom = clamp(ppd, this.geo.min, PPD_MAX);
     this.active = null;
-    store('span-lanes-zoom', String(this.zoom));
-    this.render();
+    this.raf ||= requestAnimationFrame(() => { this.raf = 0; this.render(); });
   }
 
   /**
-   * Jumps to a preset (days in view) or back to fitting the plan, keeping
-   * the middle of the view where it is.
-   * @param {string} name `fit` or a key of {@link PRESETS}.
+   * Jumps to a preset span, centred as the zoom timeline does: on the
+   * departure day for short spans, on the whole plan for long ones.
+   * @param {import('./zoomkit.js').Preset} name
    */
   preset(name) {
-    const days = PRESETS[/** @type {keyof typeof PRESETS} */ (name)];
-    if (!days) {
-      this.zoom = 'fit';
-      this.active = null;
-      store('span-lanes-zoom', 'fit');
-      this.render();
-      this.sc.scrollLeft = 0;
-      return;
-    }
-    const w = this.view();
-    this.keep = { day: (this.sc.scrollLeft + w / 2) / this.geo.ppd + this.geo.d0, ax: w / 2 };
-    this.zoom = clamp(w / days, PPD_MIN, PPD_MAX);
+    const { doc } = this.app, at = layout(doc), pivot = pivotOf(doc), w = this.view();
+    const body = [...at.values()].filter((p) => p.item.kind !== 'window');
+    const lo = body.length ? Math.min(...body.map((p) => p.start)) : nowIdx();
+    const hi = body.length ? Math.max(...body.map((p) => p.show)) : lo;
+    const focus = pivot ? /** @type {Placed} */ (at.get(pivot.id)).end : lo, mid = (lo + hi) / 2;
+    const center = { Hours: focus + 0.45, Days: focus + 2, Weeks: focus, Months: mid, Year: mid }[name];
+    this.zoom = clamp(w / PRESETS[name], this.geo.min, PPD_MAX);
+    this.keep = { day: center, ax: w / 2 };
     this.active = name;
-    store('span-lanes-zoom', String(this.zoom));
     this.render();
   }
 
@@ -213,7 +201,7 @@ export class Lanes {
   }
 
   /** Forgets what was open, for a newly opened plan. */
-  reset() { this.open = null; this.drawn = false; this.sc.scrollLeft = 0; }
+  reset() { this.open = null; this.drawn = false; this.zoom = 'fit'; this.active = null; this.sc.scrollLeft = 0; }
 
   /** @returns {string} localStorage key for the open rows of this plan. */
   get key() { return `span-lanes:${this.app.planId ?? 'local'}`; }
@@ -223,13 +211,12 @@ export class Lanes {
    * @param {HTMLElement} t Click target.
    */
   click(t) {
-    const b = /** @type {HTMLElement | null} */ (t.closest('[data-tg],[data-pick],[data-all],[data-zoom],[data-step],[data-sel]'));
+    const b = /** @type {HTMLElement | null} */ (t.closest('[data-tg],[data-pick],[data-all],[data-p],[data-sel]'));
     if (!b || !this.open || this.justDragged) return;
     const { app } = this, d = b.dataset;
     if (d.pick) { const id = d.pick; app.change((doc) => setRank(doc, id, 0)); return; }
     if (d.sel) { app.select(d.sel); return; }
-    if (d.zoom) { this.preset(d.zoom); return; }
-    if (d.step) { this.zoomTo(this.geo.ppd * (d.step === 'in' ? 1.6 : 1 / 1.6)); return; }
+    if (d.p) { this.preset(/** @type {import('./zoomkit.js').Preset} */ (d.p)); return; }
     if (d.all) {
       this.open.clear();
       if (d.all === '1') for (const it of app.doc.items) if (kidsOf(app.doc, it.id).length) this.open.add(it.id);
@@ -265,11 +252,12 @@ export class Lanes {
     const d0 = span.length ? Math.floor(Math.min(...span.map((p) => p.start))) - 1 : Math.floor(nowIdx());
     let d1 = span.length ? Math.ceil(Math.max(...span.map((p) => p.show))) + 2 : d0 + 30;
     const L = narrow ? 138 : 214, TAIL = hide ? 24 : 96;
-    // Where the view was, as a day at the track's left edge, so a redraw (or a zoom) doesn't jump.
-    const was = this.geo, left = this.keep ? this.keep.day - this.keep.ax / was.ppd : this.sc.scrollLeft / was.ppd + was.d0;
+    const was = this.geo;
     this.geo = { ...was, L };
-    const vw = this.view(), avail = vw - TAIL - 4;
-    const ppd = this.zoom === 'fit' ? clamp(avail / (d1 - d0), FIT_MIN, FIT_MAX) : clamp(this.zoom, Math.max(PPD_MIN, vw / Math.max(730, d1 - d0)), PPD_MAX);
+    const vw = this.view(), avail = vw - TAIL - 4, min = vw / Math.max(MIN_SPAN, d1 - d0);
+    const ppd = this.zoom === 'fit' ? clamp(clamp(avail / (d1 - d0), FIT_MIN, FIT_MAX), min, PPD_MAX) : clamp(this.zoom, min, PPD_MAX);
+    // Where the view was, as a day at the track's left edge, so a redraw doesn't jump and a zoom keeps its anchor.
+    const left = this.keep ? this.keep.day - this.keep.ax / ppd : this.sc.scrollLeft / was.ppd + was.d0;
     d1 = Math.max(d1, d0 + Math.ceil(vw / ppd));
     const W = Math.ceil((d1 - d0) * ppd) + TAIL;
     /** Handles on a bubble's ends, when its item can stretch. */
@@ -437,38 +425,36 @@ export class Lanes {
     };
     kidsOf(doc, undefined).forEach((it) => visit(it, 0, undefined, 0, it.color));
 
-    // Axis and weekend shading.
-    // Axis: day numbers under month names between 9 and 150 px a day; hours above, months or years below.
-    let ax = '', shade = '';
-    const daily = ppd >= FIT_MIN && ppd < 150;
-    for (let i = d0; i < d1; i++) {
-      const dt = dateOf(i), wd = dt.getUTCDay(), we = wd === 0 || wd === 6;
-      if (daily && (ppd >= 16 || wd === 1)) ax += `<span class="${we ? 'wk' : ''}" style="left:${x(i)}px;width:${ppd}px">${dt.getUTCDate()}</span>`;
-      if (daily && (i === d0 || dt.getUTCDate() === 1)) ax += `<b style="left:${x(i)}px">${MON[dt.getUTCMonth()]} ${dt.getUTCFullYear()}</b>`;
-      if (we && ppd >= 6) shade += `<i style="left:${L + x(i)}px;width:${ppd}px"></i>`;
-    }
-    if (!daily) {
-      const t = axisTicks(d0, d1, ppd);
-      for (const [d, label] of t.minor) ax += `<span class="tk" style="left:${x(d)}px">${esc(label)}</span>`;
-      for (const [d, label] of t.major) ax += `<b style="left:${x(d)}px">${esc(label)}</b>`;
-      if (t.k === 'h') for (const [d] of t.minor) shade += `<i class="hr" style="left:${L + x(d)}px"></i>`;
-    }
-    const today = nowIdx();
-    if (today > d0 && today < d1) shade += `<i class="today" style="left:${L + x(today)}px"></i>`;
-
-    const zb = (/** @type {string} */ k, /** @type {string} */ label) => `<button data-zoom="${k}" aria-pressed="${k === 'fit' ? this.zoom === 'fit' : this.active === k}">${label}</button>`;
-    this.top.innerHTML = `${leanBar(this.app)}
-  <div class="seg ln-all"><button data-all="1">Expand all</button><button data-all="0">Collapse all</button></div>
-  <div class="seg ln-zoom" role="group" aria-label="Zoom"><button class="ln-step" data-step="out" aria-label="Zoom out">−</button>${zb('fit', 'Fit')}${Object.keys(PRESETS).map((k) => zb(k, k)).join('')}<button class="ln-step" data-step="in" aria-label="Zoom in">+</button></div>`;
-    /** @type {HTMLElement} */ (this.top.nextElementSibling).innerHTML = `Tap a row's arrow or a bubble to open it, a number to make that option the pick, a name to see or edit it. Drag a bubble's ends to change its dates; pinch or ${/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'}+scroll to zoom.${miss.length ? ' <b class="ln-miss-k">!</b> marks a change of place with no transport.' : ''}`;
+    this.lean.innerHTML = leanBar(this.app);
+    this.slider.value = String(toSlider(ppd, min));
+    this.hint.innerHTML = `${narrow
+      ? 'Pinch to zoom. Tap a row\'s arrow or a bubble to open it, a number to make that option the pick, a name to see or edit it. Drag a bubble\'s ends to change its dates.'
+      : 'Ctrl+scroll or pinch the trackpad to zoom. Tap a row\'s arrow or a bubble to open it, a number to make that option the pick, a name to see or edit it. Drag a bubble\'s ends to change its dates.'}${miss.length ? ' <b class="ln-miss-k">!</b> marks a change of place with no transport.' : ''}`;
+    // The axis and gridlines are drawn for the visible window by drawAxis().
     this.sc.innerHTML = `<div class="ln-grid" style="--L:${L}px;width:${L + W}px">
-  <div class="ln-shade" aria-hidden="true">${shade}</div>
-  <div class="ln-row ln-ax"><div class="ln-lab"></div><div class="ln-trk" style="width:${W}px">${ax}</div></div>
+  <div class="ln-shade" aria-hidden="true"></div>
+  <div class="ln-row ln-ax"><div class="ln-lab"><small class="ln-scale"></small></div><div class="ln-trk" style="width:${W}px"></div></div>
   ${rows.map((r) => `<div class="ln-row d${Math.min(r.dep, 3)}" style="height:${r.h}px${r.tint ? `;--t:var(--c-${r.tint})` : ''}"><div class="ln-lab" style="--dep:${r.dep}">${r.lab}</div><div class="ln-trk" style="width:${W}px">${r.trk}</div></div>`).join('')}
 </div>`;
     if (this.drawn) this.sc.scrollLeft = (left - d0) * ppd;
-    this.geo = { d0, ppd, L };
+    this.geo = { d0, d1, ppd, L, min };
     this.keep = null;
     this.drawn = true;
+    this.drawAxis();
+  }
+
+  /** Redraws the axis, gridlines, weekend shading and today line for the visible window only. */
+  drawAxis() {
+    const { d0, d1, ppd, L } = this.geo, sc = this.sc, sl = sc.scrollLeft, w = this.view();
+    const axt = sc.querySelector('.ln-ax .ln-trk'), shade = sc.querySelector('.ln-shade'), label = sc.querySelector('.ln-scale');
+    if (!axt || !shade || !label) return;
+    const a = Math.max(d0, sl / ppd + d0 - 1), b = Math.min(d1, (sl + w) / ppd + d0 + 1);
+    const x = (/** @type {number} */ d) => (d - d0) * ppd;
+    const { axis, grid, scale } = axisMarks(a, b, ppd, x, sl, L);
+    const today = nowIdx();
+    axt.innerHTML = axis;
+    shade.innerHTML = grid + (today >= a && today <= b ? `<i class="today" style="left:${L + x(today)}px"></i>` : '');
+    label.textContent = scale;
+    markPreset(this.pre, this.active, scale);
   }
 }
