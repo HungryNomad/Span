@@ -38,6 +38,8 @@
 .ln-ax .ln-lab { padding: 0 10px; align-items: center; }
 .ln-ax .ln-lab small { display: block; padding: 0; }
 .ln-ax .ln-trk { height: 48px; overflow: hidden; }
+/* Today's tag starts at its line, so it isn't hidden under the names when the plan starts tomorrow. */
+.ln-ax .todaytag { transform: translateX(-3px); }
 .ln-lab.tg { cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; }
 .ln-lab.tg:hover, .ln-lab.tg:focus-visible { background: color-mix(in srgb, var(--ink) 5%, var(--surface)); outline: none; }
 .ln-lab.tg:active { background: color-mix(in srgb, var(--ink) 9%, var(--surface)); }
@@ -124,6 +126,8 @@
 @media (max-width: 640px) {
   /* The summary goes under the name, so a narrow column still shows it. */
   .ln-lab { flex-wrap: wrap; align-content: flex-start; row-gap: 0; padding-top: 3px; }
+  /* A zero basis keeps a long name beside its caret, cut short, instead of wrapping under it. */
+  .ln-lab .ln-n { flex: 1 1 0; }
   .ln-lab small { flex: 1 0 100%; padding: 0 0 0 24px; font-size: 10.5px; line-height: 1.25; }
   .ln-lab .ln-rk ~ small { padding-left: 48px; }
   .ln-ax .ln-lab { flex-wrap: nowrap; padding-top: 0; }

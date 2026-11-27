@@ -322,7 +322,7 @@ function issuesOf() {
     out.push({ key: `ovl:${id}`, tone: 'ovl', label: `${n} booked twice in ${trip}`, rows: c.overlaps.map(([a, b]) => ({ text: `${it.name} · ${nightsText(a, b)}`, a, b, sel: `item:${id}`, fix: id })) });
   }
   for (const w of pastWindows(doc, optional)) {
-    out.push({ key: `win:${w.item.id}`, tone: 'gap', label: w.item.name, rows: [{ text: `${w.text}${w.trip ? ` (${w.trip})` : ''}`, sel: `item:${w.item.id}` }] });
+    out.push({ key: `win:${w.item.id}`, tone: 'gap', label: `After ${w.window.name}`, rows: [{ text: `${w.text}${w.trip ? ` (${w.trip})` : ''}`, sel: `item:${w.item.id}` }] });
   }
   const miss = missingMoves(doc, at, optional);
   if (miss.length) {
@@ -537,8 +537,18 @@ addEventListener('visibilitychange', () => { if (document.visibilityState === 'h
 // Keep the timeline and chart sized to the window; switch phone/desktop behavior.
 let resizeRaf = 0;
 addEventListener('resize', () => { cancelAnimationFrame(resizeRaf); resizeRaf = requestAnimationFrame(renderAll); });
-NARROW.addEventListener('change', (e) => { app.narrow = e.matches; /** @type {HTMLDetailsElement} */ ($('#more')).open = !e.matches; renderAll(); });
+NARROW.addEventListener('change', (e) => {
+  app.narrow = e.matches;
+  /** @type {HTMLDetailsElement} */ ($('#more')).open = !e.matches;
+  /** @type {HTMLDetailsElement} */ ($('#planmenu')).open = !e.matches;
+  renderAll();
+});
 /** @type {HTMLDetailsElement} */ ($('#more')).open = !NARROW.matches;
+// The plan buttons sit in a row on wider screens; on a phone they're a menu that closes after a pick.
+/** @type {HTMLDetailsElement} */ ($('#planmenu')).open = !NARROW.matches;
+$('#planmenu').addEventListener('click', (e) => {
+  if (NARROW.matches && /** @type {HTMLElement} */ (e.target).closest('.planmenu-in button')) /** @type {HTMLDetailsElement} */ ($('#planmenu')).open = false;
+});
 
 syncTheme();
 boot();
