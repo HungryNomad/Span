@@ -7,7 +7,7 @@
  *
  * @module
  */
-import { ancestors, byId, kidsOf } from './model.js';
+import { ancestors, byId, isMoment, kidsOf, subtree, typeOf } from './model.js';
 import { hops, sleeps } from './trip.js';
 
 /** @typedef {import('./model.js').PlanDoc} PlanDoc */
@@ -84,17 +84,22 @@ export function cityIn(text) {
 
 /**
  * The place an item is in: the first of it and its ancestors naming a known
- * city, or else the nearest ancestor that isn't an either/or group.
+ * city, else the nearest of them typed as a place (unless it holds known
+ * cities, like a country), else the nearest ancestor that isn't an either/or
+ * group. `sure` is false for that last guess.
  * @param {PlanDoc} doc
  * @param {Item} it
- * @returns {{name: string, city?: City}}
+ * @returns {{name: string, city?: City, sure: boolean}}
  */
 export function placeOf(doc, it) {
   const chain = [it, ...ancestors(doc, it)];
-  for (const a of chain) { const city = cityIn(a.name); if (city) return { name: city.name, city }; }
+  for (const a of chain) { const city = cityIn(a.name); if (city) return { name: city.name, city, sure: true }; }
+  // A place typed by hand (a town the table doesn't know), unless it holds known cities: then it's a country.
+  const typed = chain.find((a) => typeOf(a) === 'place');
+  if (typed && ![...subtree(doc, typed.id)].some((id) => id !== typed.id && cityIn(byId(doc, id)?.name ?? ''))) return { name: typed.name, sure: true };
   const parent = byId(doc, it.parent);
   const named = chain.slice(1).find((a) => a.kind !== 'group') ?? parent;
-  return { name: (named ?? it).name };
+  return { name: (named ?? it).name, sure: false };
 }
 
 /**
@@ -102,6 +107,7 @@ export function placeOf(doc, it) {
  * @typedef {object} Stop
  * @property {string} name Place name.
  * @property {City} [city]
+ * @property {boolean} sure Whether the place is known (a city, or an item typed as a place).
  * @property {number} start First night, as a day index.
  * @property {number} end Morning you leave.
  * @property {Placed[]} stays Where you sleep, in order.
@@ -126,7 +132,7 @@ export function stopsOf(doc, at, optional) {
     if (last && last.name === pl.name && p.start <= last.end + 0.01) {
       last.stays.push(p);
       last.end = Math.max(last.end, p.end);
-    } else stops.push({ name: pl.name, city: pl.city, start: p.start, end: p.end, stays: [p], hops: [] });
+    } else stops.push({ name: pl.name, city: pl.city, sure: pl.sure, start: p.start, end: p.end, stays: [p], hops: [] });
   }
   /** @type {Hop[]} */
   const before = [];
@@ -160,6 +166,49 @@ export function rivalsOf(doc, it) {
  */
 export function legsOf(doc, id) {
   /** A flight, or a group of flights to pick from. */
-  const hourly = (/** @type {Item} */ it) => it.unit === 'hour' || (it.kind === 'group' && kidsOf(doc, it.id)[0]?.unit === 'hour');
+  const hourly = (/** @type {Item} */ it) => isMoment(it) || (it.kind === 'group' && !!kidsOf(doc, it.id)[0] && isMoment(kidsOf(doc, it.id)[0]));
   return kidsOf(doc, id).filter((k) => k.kind !== 'window' && !hourly(k)).map((k) => k.name);
+}
+
+/**
+ * A change of place with no transport booked between: you leave one known
+ * place and next sleep in another, and nothing moves you.
+ * @typedef {object} Missing
+ * @property {string} from Place you leave.
+ * @property {string} to Place you arrive in.
+ * @property {number} day Day you arrive (the next place's first night).
+ * @property {Item} stay First stay in the next place.
+ */
+
+/**
+ * Moves the picked route needs but doesn't have. Stays in the same place
+ * need none (walking or local transit); a stay whose place is only a guess
+ * is skipped rather than flagged.
+ * @param {PlanDoc} doc
+ * @param {Layout} at
+ * @param {boolean} optional
+ * @returns {Missing[]}
+ */
+export function missingMoves(doc, at, optional) {
+  const { stops } = stopsOf(doc, at, optional);
+  /** @type {Missing[]} */
+  const out = [];
+  for (let i = 1; i < stops.length; i++) {
+    const a = stops[i - 1], b = stops[i];
+    if (a.name === b.name || !a.sure || !b.sure || a.hops.length) continue;
+    out.push({ from: a.name, to: b.name, day: Math.floor(b.start), stay: b.stays[0].item });
+  }
+  return out;
+}
+
+/**
+ * Where a new transport for a missing move goes: inside the nearest item
+ * holding the arriving stay (never directly in an either/or group, where it
+ * would become an option), or at the top level.
+ * @param {PlanDoc} doc
+ * @param {Item} stay
+ * @returns {string | undefined} Parent id.
+ */
+export function moveParent(doc, stay) {
+  return ancestors(doc, stay).find((a) => a.kind === 'item')?.id;
 }

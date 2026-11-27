@@ -16,6 +16,7 @@ import {
   total, unitText,
 } from './model.js';
 import { Lanes } from './lanes.js';
+import { missingMoves } from './places.js';
 import { RouteMap } from './routemap.js';
 import { Sheet } from './sheet.js';
 import { Story } from './story.js';
@@ -260,6 +261,8 @@ function summary() {
     list.reduce((t, [, c]) => t + c[k].reduce((n, [a, b]) => n + b - a, 0), 0);
   if (gaps.length) out += `<button class="sum-warn gap" data-sel="item:${esc(gaps[0][0])}">${nights(gaps, 'gaps')} unbooked</button>`;
   if (ovl.length) out += `<button class="sum-warn ovl" data-sel="item:${esc(ovl[0][0])}">${nights(ovl, 'overlaps')} double-booked</button>`;
+  const miss = missingMoves(doc, at, optional);
+  if (miss.length) out += `<button class="sum-warn gap" data-sel="item:${esc(miss[0].stay.id)}" title="${esc(miss.map((m) => `${m.from} → ${m.to}`).join(', '))}">${miss.length} move${miss.length === 1 ? '' : 's'} missing</button>`;
   const tag = { all: 'stays + travel', stays: 'stays only', travel: 'travel only', none: 'costs hidden' }[filter];
   return out + `<span class="sum-tag">${tag}${optional && filter !== 'none' ? ', optional in' : ''}</span>`;
 }

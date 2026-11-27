@@ -125,3 +125,63 @@ test('link chips name known sites', () => {
   assert.equal(M.siteOf('https://example.org/a'), 'example.org');
   assert.ok(!M.isLink('javascript:alert(1)'));
 });
+
+test('old plans get types guessed from names and nesting; saved types stay', () => {
+  const doc = M.normalize({
+    v: 2, items: [
+      { id: 'th', name: 'Thailand', start: '2026-12-01' },
+      { id: 'bkk', name: 'Bangkok flat', parent: 'th', len: 5 },
+      { id: 'fly', name: 'AirAsia SGN → BKK', parent: 'th', unit: 'hour', at: 10, len: 1.5 },
+      { id: 'bus', name: 'Night bus to Chiang Mai', parent: 'th', unit: 'hour', at: 20, len: 10 },
+      { id: 'cook', name: 'Cooking class', parent: 'th', unit: 'hour', at: 9, len: 3 },
+      { id: 'mine', name: 'Cooking class', parent: 'th', unit: 'hour', at: 9, len: 3, type: 'transport', mode: 'boat' },
+      { id: 'odd', name: 'Odd', parent: 'th', len: 2, type: 'nonsense', mode: 'plane' },
+    ],
+  });
+  const type = (/** @type {string} */ id) => { const it = M.byId(doc, id); return [it?.type, it?.mode]; };
+  assert.deepEqual(type('th'), ['place', undefined]);
+  assert.deepEqual(type('bkk'), ['stay', undefined]);
+  assert.deepEqual(type('fly'), ['transport', 'plane']);
+  assert.deepEqual(type('bus'), ['transport', 'bus']);
+  assert.deepEqual(type('cook'), ['event', undefined]);
+  assert.deepEqual(type('mine'), ['transport', 'boat']);
+  assert.deepEqual(type('odd'), ['stay', undefined], 'unknown types are guessed again; modes only on transport');
+  assert.deepEqual(M.normalize(JSON.parse(JSON.stringify(doc))), doc, 'types survive a save');
+});
+
+test('events are not stays: no coverage, nothing to sleep in', () => {
+  const doc = M.normalize({ v: 2, items: [
+    { id: 'p', name: 'Paris', start: '2026-05-01', len: 3 },
+    { id: 'a', name: 'Hotel', parent: 'p', len: 3 },
+    { id: 'e', name: 'Concert', parent: 'p', unit: 'day', len: 2, type: 'event' },
+  ] });
+  assert.equal(M.coverage(doc, M.layout(doc), false).size, 0, 'the event does not double-book the hotel');
+});
+
+test('setEdge moves an end or a start, keeping children and followers in place', () => {
+  const doc = M.normalize({ v: 2, items: [
+    { id: 'a', name: 'A', start: '2026-03-10', len: 5, minLen: 4, maxLen: 6 },
+    { id: 'r', name: 'Room', parent: 'a', len: 5 },
+    { id: 'b', name: 'B', after: 'a', len: 4 },
+    { id: 'g', name: 'Rooms', kind: 'group', parent: 'b' },
+    { id: 'g1', name: 'One', parent: 'g', len: 4 },
+    { id: 'g2', name: 'Two', parent: 'g', len: 3 },
+  ] });
+  const day = M.dayOf('2026-03-10'), at = () => M.layout(doc);
+  assert.ok(M.setEdge(doc, 'a', 'end', day + 8));
+  assert.equal(M.byId(doc, 'a')?.len, 8);
+  assert.deepEqual([M.byId(doc, 'a')?.minLen, M.byId(doc, 'a')?.maxLen], [4, 8], 'the range widens');
+  assert.equal(at().get('b')?.start, day + 8, 'the follower moves with the end');
+  assert.ok(M.setEdge(doc, 'a', 'start', day + 2));
+  assert.equal(M.byId(doc, 'a')?.start, '2026-03-12');
+  assert.equal(M.byId(doc, 'a')?.len, 6);
+  assert.equal(at().get('a')?.end, day + 8, 'the end stays');
+  assert.equal(at().get('r')?.start, day, 'the room keeps its dates');
+  assert.ok(!M.setEdge(doc, 'a', 'start', day + 20) || M.byId(doc, 'a')?.len === 1, 'never shorter than one night');
+  assert.equal(M.byId(doc, 'a')?.len, 1);
+  M.setEdge(doc, 'g', 'start', day + 6);
+  assert.equal(at().get('g')?.start, day + 6, 'a group start moves before its parent');
+  assert.deepEqual([M.byId(doc, 'g1')?.len, M.byId(doc, 'g2')?.len], [6, 5], 'every option stretches alike');
+  assert.deepEqual([M.byId(doc, 'g')?.offset, M.byId(doc, 'b')?.offset], [-2, 0], 'the group moves by its offset, its parent stays');
+  assert.ok(!M.canStretch(doc, M.byId(doc, 'r') ?? doc.items[0]) === false && !M.setEdge(doc, 'nope', 'end', day));
+});

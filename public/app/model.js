@@ -10,6 +10,16 @@
 
 /** @typedef {'night' | 'day' | 'hour'} Unit */
 /** @typedef {'fixed' | 'per' | 'date'} CostType */
+/**
+ * What an `item` is, for a trip:
+ * - `place`: a country or city you spend nights in (holds stays, moves, events).
+ * - `stay`: where you sleep inside a place; stays in one place need no transport between them.
+ * - `transport`: a move between places (plane, train, bus, car, boat…), measured in hours.
+ * - `event`: something you do or attend, with its own time and cost.
+ * Fixed windows (`kind: 'window'`) are the fifth type, constraints (a visa).
+ * @typedef {'place' | 'stay' | 'transport' | 'event'} ItemType
+ */
+/** @typedef {'plane' | 'train' | 'bus' | 'car' | 'boat' | 'other'} Mode */
 
 /**
  * One cost on an item.
@@ -38,6 +48,8 @@
  * @typedef {object} Item
  * @property {string} id
  * @property {'item' | 'group' | 'window'} kind
+ * @property {ItemType} [type] What an `item` is; set on every item once normalized.
+ * @property {Mode} [mode] How a `transport` item travels.
  * @property {string} name
  * @property {string} [parent] Id of the containing item or group.
  * @property {string} [after] Id of the item this one follows.
@@ -96,6 +108,17 @@ export const COLORS = ['green', 'orange', 'blue', 'pink', 'purple', 'teal', 'gra
 
 /** Days per unit. */
 export const UNIT_DAYS = { night: 1, day: 1, hour: 1 / 24 };
+
+/** Item types: label and a short hint, in menu order. */
+export const TYPES = /** @type {Record<ItemType, [string, string]>} */ ({
+  place: ['Place', 'a country or city'], stay: ['Stay', 'where you sleep there'],
+  transport: ['Transport', 'getting between places'], event: ['Event', 'something you do or attend'],
+});
+
+/** Transport modes: label and icon, in menu order. */
+export const MODES = /** @type {Record<Mode, [string, string]>} */ ({
+  plane: ['Plane', '✈'], train: ['Train', '🚆'], bus: ['Bus', '🚌'], car: ['Car', '🚗'], boat: ['Boat', '⛴'], other: ['Other', '➜'],
+});
 
 /** Singular and plural unit words. */
 export const UNIT_WORDS = { night: ['night', 'nights'], day: ['day', 'days'], hour: ['hour', 'hours'] };
@@ -451,9 +474,10 @@ export function total(doc, { optional = false, root, over, at = layout(doc, over
 export function coverage(doc, at, optional) {
   const out = new Map();
   for (const it of doc.items) {
-    if (it.kind !== 'item' || it.unit === 'hour') continue;
+    if (it.kind !== 'item' || it.unit === 'hour' || typeOf(it) === 'event') continue;
     const spans = kidsOf(doc, it.id)
-      .filter((k) => (k.kind === 'group' ? kidsOf(doc, k.id)[0]?.unit === it.unit : k.kind === 'item' && k.unit === it.unit && (k.committed || optional)))
+      .filter((k) => (k.kind === 'group' ? kidsOf(doc, k.id)[0]?.unit === it.unit && !isMoment(kidsOf(doc, k.id)[0])
+        : k.kind === 'item' && k.unit === it.unit && !isMoment(k) && typeOf(k) !== 'event' && (k.committed || optional)))
       .map((k) => /** @type {Placed} */ (at.get(k.id)));
     if (!spans.length) continue;
     const p = /** @type {Placed} */ (at.get(it.id)), a = Math.floor(p.start);
@@ -576,6 +600,60 @@ export function setRank(doc, id, rank) {
 }
 
 /**
+ * Whether an item's start or end can be dragged: a night or day item (or an
+ * either/or group of them) with a set length.
+ * @param {PlanDoc} doc
+ * @param {Item} it
+ * @returns {boolean}
+ */
+export function canStretch(doc, it) {
+  const ok = (/** @type {Item} */ k) => k.kind === 'item' && k.unit !== 'hour' && k.len !== undefined;
+  if (it.kind === 'group') { const ks = kidsOf(doc, it.id); return ks.length > 0 && ks.every(ok); }
+  return ok(it);
+}
+
+/**
+ * Moves one end of an item to a day, as when dragging a bubble's edge. The
+ * end moves the length; the start moves the start and keeps the end, and
+ * children timed from the item's start stay where they were. On an either/or
+ * group every option changes by the same amount. A length range widens to
+ * take the new length.
+ * @param {PlanDoc} doc Mutated in place.
+ * @param {string} id
+ * @param {'start' | 'end'} side
+ * @param {number} day Day index the edge should land on (rounded to whole days).
+ * @param {number} [fallback] Start day for items with no anchor, as given to {@link layout}.
+ * @returns {boolean} Whether anything changed.
+ */
+export function setEdge(doc, id, side, day, fallback) {
+  const it = byId(doc, id);
+  if (!it || !canStretch(doc, it)) return false;
+  const p = /** @type {Placed} */ (layout(doc, {}, fallback).get(id));
+  const targets = it.kind === 'group' ? kidsOf(doc, it.id) : [it];
+  const shortest = Math.min(...targets.map((k) => /** @type {number} */ (k.len)));
+  const d = Math.round(day);
+  /** Sets a length, widening its range if needed. @param {Item} k @param {number} len */
+  const setLen = (k, len) => {
+    k.len = len;
+    if (isRanged(k)) { k.minLen = Math.min(k.minLen, len); k.maxLen = Math.max(k.maxLen, len); }
+  };
+  if (side === 'end') {
+    const delta = Math.max(d - Math.round(p.end), 1 - shortest);
+    if (!delta) return false;
+    for (const k of targets) setLen(k, /** @type {number} */ (k.len) + delta);
+    return true;
+  }
+  const delta = Math.min(d - Math.floor(p.start), shortest - 1);
+  if (!delta) return false;
+  if (it.start && !it.after) it.start = isoOf(dayOf(it.start) + delta);
+  else it.offset += delta;
+  // Children timed from this item's start keep their dates (a group's options move with it).
+  if (it.kind === 'item') for (const k of kidsOf(doc, it.id)) if (!k.after && !k.start) k.offset -= delta;
+  for (const k of targets) setLen(k, /** @type {number} */ (k.len) - delta);
+  return true;
+}
+
+/**
  * Removes routes no cost line uses any more.
  * @param {PlanDoc} doc Mutated in place.
  */
@@ -655,6 +733,58 @@ export const emptyDoc = () => ({ v: 2, currency: 'USD', people: 1, items: [], ro
 export const makeItem = (fields) => ({
   kind: 'item', offset: 0, unit: 'night', committed: true, costs: [], color: 'gray', links: [], images: [], ...fields,
 });
+
+/** A name that reads like a move: "SGN → BKK", "Taipei to Tainan", "Night bus". */
+const MOVE = /→|->|\b[A-Z]{3}\s*(–|to)\s*[A-Z]{3}\b|\b(flights?|fly|plane|train|rail|bus|coach|ferry|boat|car|taxi|grab|drive|transfer|shuttle|airlines?|airways|air|vietjet|airasia|eva)\b/i;
+
+/**
+ * How a move travels, guessed from its name.
+ * @param {string} name e.g. "VietJet SGN → BKK" or "Taipei → Tainan train".
+ * @returns {Mode}
+ */
+export function modeOf(name) {
+  if (/\b(train|rail|hsr|shinkansen)\b/i.test(name)) return 'train';
+  if (/\b(bus|coach)\b/i.test(name)) return 'bus';
+  if (/\b(ferry|boat|cruise|speedboat)\b/i.test(name)) return 'boat';
+  if (/\b(car|taxi|grab|uber|drive|driving|rental)\b/i.test(name)) return 'car';
+  if (/\b(flights?|fly|plane|airlines?|airways|air|jet|vietjet|airasia|eva)\b/i.test(name) || /\b[A-Z]{3}\s*(→|->|–|to)\s*[A-Z]{3}\b/.test(name)) return 'plane';
+  return 'other';
+}
+
+/**
+ * Best guess at an item's type, for plans saved before types existed. Hour
+ * items are moves when their name or a fare says so, else events; night and
+ * day items are places when they hold nights or days (directly or as either/or
+ * options) or sit at the top, else stays.
+ * @param {Item[]} items The whole plan.
+ * @param {Item} it An item with `kind: 'item'`.
+ * @returns {ItemType}
+ */
+export function inferType(items, it) {
+  if (it.unit === 'hour') return MOVE.test(it.name) || it.costs.some((c) => /fare/i.test(c.label)) ? 'transport' : 'event';
+  /** @param {string} id @returns {Item[]} */
+  const kids = (id) => items.filter((k) => k.parent === id);
+  const nights = (/** @type {Item} */ k) => k.kind === 'item' && k.unit !== 'hour';
+  if (kids(it.id).some((k) => nights(k) || (k.kind === 'group' && kids(k.id).some(nights)))) return 'place';
+  const byKey = new Map(items.map((k) => [k.id, k]));
+  for (let p = byKey.get(it.parent ?? ''), n = 0; p && n < 50; p = byKey.get(p.parent ?? ''), n++) if (p.kind === 'item') return 'stay';
+  return 'place';
+}
+
+/**
+ * An item's type, guessing for items made before types existed.
+ * @param {Item} it
+ * @returns {ItemType | undefined} Undefined for groups and windows.
+ */
+export const typeOf = (it) => (it.kind !== 'item' ? undefined : it.type ?? (it.unit === 'hour' ? (MOVE.test(it.name) ? 'transport' : 'event') : 'stay'));
+
+/**
+ * Whether an item happens at a moment rather than over nights: a move or an
+ * event measured in hours.
+ * @param {Item} it
+ * @returns {boolean}
+ */
+export const isMoment = (it) => it.kind === 'item' && (typeOf(it) === 'transport' || (typeOf(it) === 'event' && it.unit === 'hour'));
 
 /**
  * Turns a v1 plan (flat bars chained with `after`) into a v2 one. Several
@@ -787,6 +917,8 @@ export function normalize(raw) {
         });
       }
     }
+    if (kind === 'item' && Object.hasOwn(TYPES, r.type)) it.type = r.type;
+    if (kind === 'item' && Object.hasOwn(MODES, r.mode)) it.mode = r.mode;
     if (Array.isArray(r.links)) it.links = [...new Set(r.links.filter(isLink))].slice(0, MAX_LINKS);
     if (Array.isArray(r.images)) it.images = [...new Set(r.images.filter((/** @type {unknown} */ s) => typeof s === 'string' && IMAGE_ID.test(s)))].slice(0, MAX_IMAGES);
     items.push(it);
@@ -805,6 +937,13 @@ export function normalize(raw) {
       if (path.has(p.id)) { delete it.parent; break; }
       path.add(p.id);
     }
+  }
+  // Types for plans saved before they existed; moves always know their mode.
+  for (const it of items) {
+    if (it.kind !== 'item') continue;
+    it.type ??= inferType(items, it);
+    if (it.type === 'transport') it.mode ??= modeOf(it.name);
+    else delete it.mode;
   }
   return {
     v: 2,
@@ -882,7 +1021,7 @@ export function sampleDoc() {
   const vn = /** @type {Item} */ (byId(doc, 'vn'));
   vn.costs = vn.costs.filter((c) => c.label !== 'Room');
   const room = (/** @type {string} */ id, /** @type {string} */ name, /** @type {number} */ offset, /** @type {number} */ len, /** @type {number} */ rate, committed = true) =>
-    makeItem({ id, name, parent: 'vn', offset, len, committed, color: 'green', costs: [{ label: 'Room', type: 'per', amount: rate, pp: false }] });
+    makeItem({ id, name, type: 'stay', parent: 'vn', offset, len, committed, color: 'green', costs: [{ label: 'Room', type: 'per', amount: rate, pp: false }] });
   doc.items.splice(doc.items.indexOf(vn) + 1, 0,
     room('vn-hanoi', 'Hanoi apartment', 0, 28, 26),
     room('vn-hoian', 'Hoi An homestay', 28, 30, 38),
@@ -901,7 +1040,7 @@ export function sampleDoc() {
 function addRooms(doc) {
   /** @type {(id: string, name: string, parent: string, rate: number, color: string, offset: number, len: number) => Item} */
   const room = (id, name, parent, rate, color, offset, len) =>
-    makeItem({ id, name, parent, offset, len, color, costs: [{ label: 'Room', type: 'per', amount: rate, pp: false }] });
+    makeItem({ id, name, type: 'stay', parent, offset, len, color, costs: [{ label: 'Room', type: 'per', amount: rate, pp: false }] });
   /** @type {(id: string, name: string, parent: string, offset: number) => Item} */
   const group = (id, name, parent, offset) => makeItem({ id, kind: 'group', name, parent, offset });
   const bkk = /** @type {Item} */ (byId(doc, 'bkk')), tpe = /** @type {Item} */ (byId(doc, 'tpe'));
