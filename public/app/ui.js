@@ -17,6 +17,9 @@
  * @property {Set<string>} open Items expanded in place (desktop).
  * @property {string | null} drill Item the timeline is drilled into, or null for the whole plan.
  * @property {boolean} narrow Phone-sized layout: children open by drilling in.
+ * @property {'lanes' | 'calendar' | 'map' | 'cards' | 'story' | 'zoom'} view Which view is showing.
+ * @property {string | null} planId Id of the open plan, or null when offline.
+ * @property {string} planName Name of the open plan.
  * @property {(fn: (doc: import('./model.js').PlanDoc) => void) => void} change Mutates the plan, re-renders and schedules a save.
  * @property {(sel: string | null) => void} select Opens the sheet for something, or closes it.
  * @property {(id: string, len: number) => void} setLen Resizes an item (clamped to its range).
